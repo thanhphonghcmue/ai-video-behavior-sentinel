@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-red: #D70018;
+  --brand-dark-red: #B30013;
+  --brand-bg: #F4F6F8;
+  --brand-surface: #FFFFFF;
+  --brand-border: #E5E7EB;
+}
+
+body {
+  color: #111827;
+  background: var(--brand-bg);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F4F6F8;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #D70018;
+}
+
+/* Pulse animation for high-threat status */
+@keyframes criticalPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(215, 0, 24, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(215, 0, 24, 0);
+  }
+}
+
+.animate-critical-pulse {
+  animation: criticalPulse 1.5s infinite ease-in-out;
+}
+
+/* Radar scanning grid effect */
+.cyber-grid {
+  background-size: 30px 30px;
+  background-image: 
+    linear-gradient(to right, rgba(215, 0, 24, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(215, 0, 24, 0.08) 1px, transparent 1px);
+}

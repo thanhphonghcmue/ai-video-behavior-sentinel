@@ -1,0 +1,47 @@
+﻿# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+*.egg-info/
+
+# Environment Variables & Secrets (CRITICAL: Do not leak API keys)
+.env
+.env*.local
+*.key
+backend/.env
+ai-threat-monitoring/.env
+ai-threat-monitoring/.env.local
+
+# Uploaded test videos
+backend/uploads/*.mp4
+backend/uploads/*.webm
+backend/uploads/*.avi
+backend/uploads/*.mov
+!backend/uploads/.gitkeep
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
