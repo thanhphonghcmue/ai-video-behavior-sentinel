@@ -147,6 +147,7 @@ class TimeInterval(BaseModel):
     risk_level: str
     is_danger: bool = False
     danger_summary: Optional[str] = None
+    behavioral_assessment: Optional[str] = None
 
 class SubjectTrack(BaseModel):
     target_id: str
@@ -171,6 +172,7 @@ class VideoActionEvent(BaseModel):
     is_danger: bool = False
     danger_summary: Optional[str] = None
     danger_notes: Optional[str] = None
+    behavioral_assessment: Optional[str] = None
     bounding_box_normalized: Optional[List[float]] = None  # [ymin, xmin, ymax, xmax] 0.0 - 1.0
 
 class VideoAnalysisResult(BaseModel):
@@ -864,8 +866,12 @@ async def upload_video_endpoint(
             - 'start_time': Float start timestamp in seconds (e.g. 0.0).
             - 'end_time': Float end timestamp in seconds (e.g. 4.5).
             - 'action_description': Specific, factual description of what the subject is physically doing during this exact time slice in Vietnamese.
-            - 'risk_score': 0 to 100 based on security/danger level.
-            - 'risk_level': "LOW", "MEDIUM", or "CRITICAL".
+            - 'risk_score': 0 to 100 based on security/danger level:
+              * Low (0-39%): Normal activity, compliant behavior.
+              * Warning (40-69%): Suspicious or unusual activity requiring monitoring.
+              * Critical (>=70%): Clear threat, aggressive behavior, hazard.
+            - 'risk_level': "Low", "Warning", or "Critical".
+            - 'behavioral_assessment': Specific security reasoning in Vietnamese explaining why this score was assigned.
             - 'is_danger': boolean (true if risk_score >= 70 else false).
             - 'danger_summary': Short warning note if dangerous, else empty string.
             - 'bounding_box_normalized': Optional [ymin, xmin, ymax, xmax] coordinates for this specific interval (float 0.0 - 1.0).
@@ -954,7 +960,8 @@ async def upload_video_endpoint(
                             "end_time": min(duration_sec, step),
                             "action_description": f"{subj_action} (Giai đoạn khởi đầu - hiện diện trong khung quan sát)",
                             "risk_score": subj_risk,
-                            "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                            "risk_level": "Critical" if subj_risk >= 70 else ("Warning" if subj_risk >= 40 else "Low"),
+                            "behavioral_assessment": f"Chủ thể {t_id} hiện diện và tương tác bình thường trong phân khu quan sát ban đầu.",
                             "is_danger": subj_risk >= 70,
                             "bounding_box_normalized": bbox
                         },
@@ -963,7 +970,8 @@ async def upload_video_endpoint(
                             "end_time": min(duration_sec, step * 2),
                             "action_description": f"{subj_action} (Giai đoạn chuyển tiếp - tương tác và duy trì tư thế)",
                             "risk_score": subj_risk,
-                            "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                            "risk_level": "Critical" if subj_risk >= 70 else ("Warning" if subj_risk >= 40 else "Low"),
+                            "behavioral_assessment": f"Theo dõi diễn tiến cử chỉ của {t_id}, đánh giá độ ổn định và tuân thủ quy chuẩn.",
                             "is_danger": subj_risk >= 70,
                             "bounding_box_normalized": bbox
                         },
@@ -972,7 +980,8 @@ async def upload_video_endpoint(
                             "end_time": duration_sec,
                             "action_description": f"{subj_action} (Giai đoạn hoàn tất - kết thúc chuỗi cử động)",
                             "risk_score": subj_risk,
-                            "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                            "risk_level": "Critical" if subj_risk >= 70 else ("Warning" if subj_risk >= 40 else "Low"),
+                            "behavioral_assessment": f"Hoàn tất chuỗi hành động của {t_id}, duy trì trạng thái an toàn tổng thể.",
                             "is_danger": subj_risk >= 70,
                             "bounding_box_normalized": bbox
                         }
@@ -986,16 +995,23 @@ async def upload_video_endpoint(
                     time_display = f"{int(st//60):02d}:{int(st%60):02d} - {int(et//60):02d}:{int(et%60):02d}"
                     act_desc = interval.get("action_description") or interval.get("action") or "Hành vi quan sát được"
                     r_score = int(interval.get("risk_score", 15))
-                    r_lvl = interval.get("risk_level", "LOW")
-                    if r_lvl in ["NORMAL", "LOW", "Safe"]:
-                        r_lvl = "LOW"
-                    elif r_lvl in ["WARNING", "MEDIUM", "MODERATE"]:
-                        r_lvl = "MEDIUM"
+                    
+                    # Risk level thresholding: Low (0-39%), Warning (40-69%), Critical (>=70%)
+                    if r_score >= 70:
+                        r_lvl = "Critical"
+                        is_d = True
+                    elif r_score >= 40:
+                        r_lvl = "Warning"
+                        is_d = False
                     else:
-                        r_lvl = "CRITICAL"
+                        r_lvl = "Low"
+                        is_d = False
 
-                    is_d = bool(interval.get("is_danger", r_score >= 70))
+                    if "is_danger" in interval:
+                        is_d = bool(interval["is_danger"])
+
                     d_sum = interval.get("danger_summary") or interval.get("danger_notes") or ("Cảnh báo nguy cơ cao" if is_d else "")
+                    b_assess = interval.get("behavioral_assessment") or (d_sum if is_d else f"Hành vi bình thường ({r_score}% rủi ro), tuân thủ quy chuẩn giám sát.")
 
                     # Interval-specific bounding box if available
                     int_bbox_raw = interval.get("bounding_box_normalized")
@@ -1014,7 +1030,8 @@ async def upload_video_endpoint(
                         risk_score=r_score,
                         risk_level=r_lvl,
                         is_danger=is_d,
-                        danger_summary=d_sum
+                        danger_summary=d_sum,
+                        behavioral_assessment=b_assess
                     ))
 
                     evt_id = f"evt_{len(events_list)+1}"
@@ -1031,10 +1048,11 @@ async def upload_video_endpoint(
                         action=act_desc,
                         action_description=act_desc,
                         risk_score=r_score,
-                        risk_level="CRITICAL" if is_d or r_lvl == "CRITICAL" else ("WARNING" if r_lvl == "MEDIUM" else "NORMAL"),
+                        risk_level=r_lvl,
                         is_danger=is_d,
                         danger_summary=d_sum,
                         danger_notes=d_sum,
+                        behavioral_assessment=b_assess,
                         bounding_box_normalized=int_bbox
                     ))
 

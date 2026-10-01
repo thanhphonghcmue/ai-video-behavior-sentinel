@@ -34,6 +34,7 @@ export interface TimeInterval {
   risk_level: string;
   is_danger?: boolean;
   danger_summary?: string;
+  behavioral_assessment?: string;
 }
 
 export interface SubjectTrack {
@@ -61,6 +62,7 @@ export interface VideoActionEvent {
   is_danger?: boolean;
   danger_summary?: string;
   danger_notes?: string;
+  behavioral_assessment?: string;
   bounding_box_normalized?: number[];
 }
 
@@ -894,9 +896,19 @@ export default function VideoAnalysisDashboard() {
                       </p>
 
                       {evt.danger_summary && (
-                        <div className="mt-2 text-[11px] text-[#EA580C] font-semibold flex items-center gap-1.5 bg-orange-50/80 p-2 rounded-xl">
+                        <div className="mt-2 text-[11px] text-[#EA580C] font-semibold flex items-center gap-1.5 bg-orange-50/80 p-2 rounded-xl border border-orange-200/50">
                           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                           <span>{evt.danger_summary}</span>
+                        </div>
+                      )}
+
+                      {evt.behavioral_assessment && evt.behavioral_assessment !== evt.danger_summary && (
+                        <div className="mt-2 text-[11px] text-slate-700 bg-slate-50 border border-slate-200/80 p-2 rounded-xl flex items-start gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-brand-blue flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 leading-relaxed">
+                            <span className="font-bold text-[#0F172A]">Đánh giá an ninh: </span>
+                            <span>{evt.behavioral_assessment}</span>
+                          </div>
                         </div>
                       )}
 
