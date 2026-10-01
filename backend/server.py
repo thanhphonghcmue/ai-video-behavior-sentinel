@@ -51,7 +51,7 @@ load_dotenv()
 
 # Setup Google GenAI Client
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
 
 genai_client = None
 
@@ -151,7 +151,7 @@ class TimeInterval(BaseModel):
 class SubjectTrack(BaseModel):
     target_id: str
     subject_class: str = Field(default="Person", alias="class")
-    bounding_box_normalized: List[int] = Field(default_factory=lambda: [150, 200, 750, 450])  # [ymin, xmin, ymax, xmax] 0-1000
+    bounding_box_normalized: List[float] = Field(default_factory=lambda: [0.15, 0.20, 0.75, 0.45])  # [ymin, xmin, ymax, xmax] 0.0 - 1.0
     time_intervals: List[TimeInterval] = Field(default_factory=list)
 
 class VideoActionEvent(BaseModel):
@@ -171,7 +171,7 @@ class VideoActionEvent(BaseModel):
     is_danger: bool = False
     danger_summary: Optional[str] = None
     danger_notes: Optional[str] = None
-    bounding_box_normalized: Optional[List[int]] = None  # [ymin, xmin, ymax, xmax] 0-1000
+    bounding_box_normalized: Optional[List[float]] = None  # [ymin, xmin, ymax, xmax] 0.0 - 1.0
 
 class VideoAnalysisResult(BaseModel):
     total_subjects_detected: int = 0
@@ -504,14 +504,8 @@ async def background_sampling_task():
                         "dwell_time": int(time.time() - camera_manager.start_dwell_time)
                     }
 
-                # Periodic Gemini analysis in background thread to avoid event loop blocking
-                if genai_client:
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    small_frame = cv2.resize(rgb, (640, 360))
-                    pil_img = Image.fromarray(small_frame)
-                    result = await asyncio.to_thread(analyze_frame_with_gemini, pil_img)
-                    result["timestamp"] = datetime.now().isoformat()
-                    latest_telemetry.update(result)
+                # Local tracking updates only (Gemini is called on-demand via /api/upload-video and /api/analyze-live)
+                latest_telemetry["timestamp"] = datetime.now().isoformat()
 
         except Exception:
             pass
@@ -769,50 +763,27 @@ async def upload_video_endpoint(
             print(f"[MODULE 1] Polling Google AI Studio file state: {getattr(uploaded_file.state, 'name', 'UNKNOWN')} ({wait_time}s)")
 
         prompt = f"""
-        Analyze this video accurately. Describe the ACTUAL visual context. Do NOT assume it is a traffic or parking scene. Identify all distinct humans, vehicles, or entities. Return structured JSON with a 'scene_summary', 'total_subjects', and a 'subjects' array containing 'target_id' and 'time_intervals' with normalized bounding boxes [ymin, xmin, ymax, xmax].
+        Analyze the attached video accurately. Describe the ACTUAL visual context (e.g., classroom, street, office). Do NOT assume it is a traffic scene unless explicitly visible. Identify all distinct human subjects or vehicles. Return 'total_subjects' and a 'subjects' array with 'target_id', 'action_description', 'risk_score', and 'bounding_box_normalized'.
 
-        DETAILED SPECIFICATIONS:
-        1. Context & Entities:
-           - Ground your analysis 100% on the visible pixels. If the video is a classroom/teacher, identify Teacher, Students, Whiteboard, Desks, etc. If it is an office, store, or warehouse, identify the actual persons and activities.
-           - Assign IDs: "Target_01", "Target_02", etc.
-           - Classify each entity type accurately: "Teacher", "Student", "Person", "Employee", "Visitor", etc.
+        OUTPUT SPECIFICATIONS:
+        - 'scene_summary': Concise description in Vietnamese of the actual observed environment and events.
+        - 'total_subjects': Integer count of all distinct subjects detected.
+        - 'subjects': Array of objects with:
+          * 'target_id': "Target_01", "Target_02", etc.
+          * 'class': "Teacher", "Student", "Person", "Vehicle", etc.
+          * 'action_description': Detailed Vietnamese description of what the subject is physically doing.
+          * 'risk_score': 0 to 100 based on security/danger level.
+          * 'risk_level': "LOW", "MEDIUM", or "CRITICAL".
+          * 'is_danger': true if risk_score >= 70 else false.
+          * 'bounding_box_normalized': [ymin, xmin, ymax, xmax] as float numbers strictly between 0.0 and 1.0.
+          * 'time_intervals': Array of time spans with start_time and end_time (seconds, up to {duration_sec}s).
 
-        2. Normalized Bounding Boxes:
-           - Provide normalized coordinates [ymin, xmin, ymax, xmax] as float numbers strictly between 0.0 and 1.0 (relative to the video dimensions).
-           - ymin, xmin is top-left corner; ymax, xmax is bottom-right corner.
-
-        3. Dynamic Time Intervals:
-           - Segment natural action boundaries (from start_time to end_time as float seconds up to {duration_sec}s).
-           - Describe actual observed actions in Vietnamese in 'action_description'.
-           - Assess 'risk_score' (0-100), 'risk_level' ("LOW", "MEDIUM", "CRITICAL"), and 'is_danger' (boolean).
-
-        REQUIRED JSON FORMAT:
-        {{
-          "scene_summary": "Tóm tắt bối cảnh thực tế chính xác của video bằng tiếng Việt",
-          "total_subjects": 1,
-          "subjects": [
-            {{
-              "target_id": "Target_01",
-              "class": "Person",
-              "bounding_box_normalized": [0.15, 0.25, 0.85, 0.50],
-              "time_intervals": [
-                {{
-                  "start_time": 0.0,
-                  "end_time": {round(duration_sec, 1)},
-                  "action_description": "Mô tả chi tiết hành vi thực tế quan sát được",
-                  "risk_score": 10,
-                  "risk_level": "LOW",
-                  "is_danger": false,
-                  "danger_summary": ""
-                }}
-              ]
-            }}
-          ]
-        }}
+        Return STRICT valid JSON only.
         """
 
         # Priority list of models to execute the real Gemini API call
         model_candidates = [
+            "gemini-1.5-pro",
             MODEL_NAME,
             "gemini-3.5-flash",
             "gemini-3.1-flash-lite",
@@ -877,6 +848,18 @@ async def upload_video_endpoint(
 
                 t_intervals: List[TimeInterval] = []
                 raw_intervals = subj.get("time_intervals") or []
+                if not raw_intervals:
+                    # Model returned action_description at subject level
+                    subj_action = subj.get("action_description") or subj.get("action") or "Hành vi quan sát được"
+                    subj_risk = int(subj.get("risk_score", 15))
+                    raw_intervals = [{
+                        "start_time": 0.0,
+                        "end_time": duration_sec,
+                        "action_description": subj_action,
+                        "risk_score": subj_risk,
+                        "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                        "is_danger": subj_risk >= 70
+                    }]
                 for interval in raw_intervals:
                     st = max(0.0, float(interval.get("start_time", 0.0)))
                     et = min(duration_sec, float(interval.get("end_time", duration_sec)))

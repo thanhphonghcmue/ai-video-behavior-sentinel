@@ -37,7 +37,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 
   const navigationItems = [
     {
-      name: 'Phân Tích Video Upload',
+      name: 'Video Analysis & Timeline',
       shortName: 'Video',
       href: '/dashboard',
       icon: Film,
@@ -45,7 +45,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       badgeColor: 'bg-blue-50 text-brand-blue border-blue-200',
     },
     {
-      name: 'Quét Camera Trực Tiếp',
+      name: 'Live Webcam Inspector',
       shortName: 'Camera',
       href: '/dashboard/quet-camera-truc-tiep',
       icon: Camera,
@@ -53,15 +53,15 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     },
     {
-      name: 'AI Copilot & Trợ Lý An Ninh',
+      name: 'AI Copilot Chat',
       shortName: 'Copilot',
       href: '/dashboard/ai-copilot',
       icon: Bot,
-      badge: 'Gemini 3.8',
+      badge: 'Gemini 1.5 Pro',
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     },
     {
-      name: 'Nhật Ký & Cảnh Báo Admin',
+      name: 'Admin Risk Logs',
       shortName: 'Cảnh Báo',
       href: '/dashboard/nhat-ky-canh-bao',
       icon: AlertTriangle,
