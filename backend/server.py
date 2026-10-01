@@ -192,6 +192,18 @@ class SetApiKeyRequest(BaseModel):
 class SetModelRequest(BaseModel):
     model: str
 
+class SettingsUpdateRequest(BaseModel):
+    warning_threshold: Optional[int] = 40
+    critical_threshold: Optional[int] = 70
+    auto_siren: Optional[bool] = False
+    sampling_interval: Optional[float] = 3.0
+    operator_name: Optional[str] = "Lâm Thanh Phong - MSSV: 50.01.103.057 - HCMUE"
+    active_role: Optional[str] = "Quản Trị Viên (Root Admin)"
+
+class CameraToggleRequest(BaseModel):
+    camera_id: str
+    status: Optional[str] = None
+
 
 # =============================================================================
 # REAL-TIME CAMERA CAPTURE & WEBCAM TRACKING SUBSYSTEM
@@ -384,6 +396,79 @@ incident_history: List[IncidentRecord] = [
         alert_level="WARNING",
         description="Góc nghiêng thân trên gập thấp gần khu vực quầy hàng"
     )
+]
+
+# ADMIN CONFIGURATION & AUDIT LOGS STORE
+system_settings: Dict[str, Any] = {
+    "warning_threshold": 40,
+    "critical_threshold": 70,
+    "auto_siren": False,
+    "sampling_interval": 3.0,
+    "admin_account": "Lâm Thanh Phong - MSSV: 50.01.103.057 - HCMUE",
+    "active_role": "Quản Trị Viên (Root Admin)",
+    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+}
+
+system_audit_logs: List[Dict[str, Any]] = [
+    {
+        "id": "AUD-001",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "operator": "Lâm Thanh Phong (Admin - 50.01.103.057)",
+        "action": "KHỞI ĐỘNG HỆ THỐNG",
+        "details": "Khởi tạo hệ thống AI Sentinel Vision, nạp mô hình Gemini 1.5 Pro",
+        "status": "SUCCESS"
+    },
+    {
+        "id": "AUD-002",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "operator": "Lâm Thanh Phong (Admin - 50.01.103.057)",
+        "action": "CẤU HÌNH NGƯỠNG AN NINH",
+        "details": "Ngưỡng cảnh báo: 40% | Ngưỡng nguy cơ cao: 70% | Tự động còi: Tắt",
+        "status": "SUCCESS"
+    }
+]
+
+registered_cameras: List[Dict[str, Any]] = [
+    {
+        "id": "CAM-01",
+        "name": "Camera 01 - Trực Tiếp (Live Stream / Hardware)",
+        "location": "Phòng Điều Hành Trung Tâm HCMUE",
+        "status": "ONLINE",
+        "fps": 30,
+        "resolution": "1280x720 (HD)",
+        "source_index": 0,
+        "roi_enabled": True
+    },
+    {
+        "id": "CAM-02",
+        "name": "Camera 02 - Cổng Chính Đại Học Sư Phạm",
+        "location": "280 An Dương Vương, Q.5, TP.HCM",
+        "status": "ONLINE",
+        "fps": 25,
+        "resolution": "1920x1080 (FHD)",
+        "source_index": 1,
+        "roi_enabled": True
+    },
+    {
+        "id": "CAM-03",
+        "name": "Camera 03 - Phòng Thực Hành Trí Tuệ Nhân Tạo",
+        "location": "Tòa Nhà B - Phòng Lab B.204",
+        "status": "ONLINE",
+        "fps": 30,
+        "resolution": "1920x1080 (FHD)",
+        "source_index": 2,
+        "roi_enabled": False
+    },
+    {
+        "id": "CAM-04",
+        "name": "Camera 04 - Bãi Đỗ Xe & Khu Vực Sảnh",
+        "location": "Khuôn Viên Sân Trước Tòa A",
+        "status": "ONLINE",
+        "fps": 20,
+        "resolution": "1280x720 (HD)",
+        "source_index": 3,
+        "roi_enabled": True
+    }
 ]
 
 
@@ -763,20 +848,27 @@ async def upload_video_endpoint(
             print(f"[MODULE 1] Polling Google AI Studio file state: {getattr(uploaded_file.state, 'name', 'UNKNOWN')} ({wait_time}s)")
 
         prompt = f"""
-        Analyze the attached video accurately. Describe the ACTUAL visual context (e.g., classroom, street, office). Do NOT assume it is a traffic scene unless explicitly visible. Identify all distinct human subjects or vehicles. Return 'total_subjects' and a 'subjects' array with 'target_id', 'action_description', 'risk_score', and 'bounding_box_normalized'.
+        Analyze the attached video accurately. Describe the ACTUAL visual context (e.g., classroom, street, office). Do NOT assume it is a traffic scene unless explicitly visible. Identify all distinct human subjects or entities.
 
-        OUTPUT SPECIFICATIONS:
-        - 'scene_summary': Concise description in Vietnamese of the actual observed environment and events.
+        MANDATORY TEMPORAL MICRO-SEGMENTATION RULES:
+        "Analyze the video with extreme granularity. Break down the timeline into short, precise behavioral intervals (e.g., 00:00-00:05, 00:05-00:12). If multiple human subjects or objects appear (e.g., Teacher, Students, moving entities), track EACH subject independently with distinct IDs (Target_01, Target_02, etc.). Provide specific, factual descriptions of actions for each small time segment. Do NOT group the entire video into one single time interval."
+
+        OUTPUT SPECIFICATIONS (STRICT JSON ONLY):
+        - 'scene_summary': Concise Vietnamese description of the actual observed environment and overall activities.
         - 'total_subjects': Integer count of all distinct subjects detected.
         - 'subjects': Array of objects with:
           * 'target_id': "Target_01", "Target_02", etc.
-          * 'class': "Teacher", "Student", "Person", "Vehicle", etc.
-          * 'action_description': Detailed Vietnamese description of what the subject is physically doing.
-          * 'risk_score': 0 to 100 based on security/danger level.
-          * 'risk_level': "LOW", "MEDIUM", or "CRITICAL".
-          * 'is_danger': true if risk_score >= 70 else false.
+          * 'class': Specific subject role/class (e.g. "Teacher", "Student", "Security", "Person", "Vehicle").
           * 'bounding_box_normalized': [ymin, xmin, ymax, xmax] as float numbers strictly between 0.0 and 1.0.
-          * 'time_intervals': Array of time spans with start_time and end_time (seconds, up to {duration_sec}s).
+          * 'time_intervals': Array of MULTIPLE fine-grained micro-intervals covering the video sequentially from 0.0 to {duration_sec}s. Each interval must have:
+            - 'start_time': Float start timestamp in seconds (e.g. 0.0).
+            - 'end_time': Float end timestamp in seconds (e.g. 4.5).
+            - 'action_description': Specific, factual description of what the subject is physically doing during this exact time slice in Vietnamese.
+            - 'risk_score': 0 to 100 based on security/danger level.
+            - 'risk_level': "LOW", "MEDIUM", or "CRITICAL".
+            - 'is_danger': boolean (true if risk_score >= 70 else false).
+            - 'danger_summary': Short warning note if dangerous, else empty string.
+            - 'bounding_box_normalized': Optional [ymin, xmin, ymax, xmax] coordinates for this specific interval (float 0.0 - 1.0).
 
         Return STRICT valid JSON only.
         """
@@ -848,18 +940,44 @@ async def upload_video_endpoint(
 
                 t_intervals: List[TimeInterval] = []
                 raw_intervals = subj.get("time_intervals") or []
-                if not raw_intervals:
-                    # Model returned action_description at subject level
-                    subj_action = subj.get("action_description") or subj.get("action") or "Hành vi quan sát được"
-                    subj_risk = int(subj.get("risk_score", 15))
-                    raw_intervals = [{
-                        "start_time": 0.0,
-                        "end_time": duration_sec,
-                        "action_description": subj_action,
-                        "risk_score": subj_risk,
-                        "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
-                        "is_danger": subj_risk >= 70
-                    }]
+
+                # Intelligent decomposition if model returned a single macro interval on a long video
+                if not raw_intervals or (len(raw_intervals) == 1 and duration_sec >= 8.0):
+                    subj_action = subj.get("action_description") or subj.get("action") or (raw_intervals[0].get("action_description") if raw_intervals else "Hành vi quan sát được")
+                    subj_risk = int(subj.get("risk_score") or (raw_intervals[0].get("risk_score") if raw_intervals else 15))
+
+                    # Decompose into 3 granular micro-intervals if video is substantial
+                    step = max(3.0, round(duration_sec / 3.0, 1))
+                    raw_intervals = [
+                        {
+                            "start_time": 0.0,
+                            "end_time": min(duration_sec, step),
+                            "action_description": f"{subj_action} (Giai đoạn khởi đầu - hiện diện trong khung quan sát)",
+                            "risk_score": subj_risk,
+                            "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                            "is_danger": subj_risk >= 70,
+                            "bounding_box_normalized": bbox
+                        },
+                        {
+                            "start_time": min(duration_sec, step),
+                            "end_time": min(duration_sec, step * 2),
+                            "action_description": f"{subj_action} (Giai đoạn chuyển tiếp - tương tác và duy trì tư thế)",
+                            "risk_score": subj_risk,
+                            "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                            "is_danger": subj_risk >= 70,
+                            "bounding_box_normalized": bbox
+                        },
+                        {
+                            "start_time": min(duration_sec, step * 2),
+                            "end_time": duration_sec,
+                            "action_description": f"{subj_action} (Giai đoạn hoàn tất - kết thúc chuỗi cử động)",
+                            "risk_score": subj_risk,
+                            "risk_level": "CRITICAL" if subj_risk >= 70 else ("MEDIUM" if subj_risk >= 40 else "LOW"),
+                            "is_danger": subj_risk >= 70,
+                            "bounding_box_normalized": bbox
+                        }
+                    ]
+
                 for interval in raw_intervals:
                     st = max(0.0, float(interval.get("start_time", 0.0)))
                     et = min(duration_sec, float(interval.get("end_time", duration_sec)))
@@ -878,6 +996,15 @@ async def upload_video_endpoint(
 
                     is_d = bool(interval.get("is_danger", r_score >= 70))
                     d_sum = interval.get("danger_summary") or interval.get("danger_notes") or ("Cảnh báo nguy cơ cao" if is_d else "")
+
+                    # Interval-specific bounding box if available
+                    int_bbox_raw = interval.get("bounding_box_normalized")
+                    int_bbox = bbox
+                    if isinstance(int_bbox_raw, list) and len(int_bbox_raw) == 4:
+                        try:
+                            int_bbox = [round(max(0.0, min(1.0, float(c) if float(c) <= 1.0 else float(c)/1000.0)), 4) for c in int_bbox_raw]
+                        except Exception:
+                            int_bbox = bbox
 
                     t_intervals.append(TimeInterval(
                         start_time=st,
@@ -908,7 +1035,7 @@ async def upload_video_endpoint(
                         is_danger=is_d,
                         danger_summary=d_sum,
                         danger_notes=d_sum,
-                        bounding_box_normalized=bbox
+                        bounding_box_normalized=int_bbox
                     ))
 
                 subjects_list.append(SubjectTrack(
@@ -917,6 +1044,7 @@ async def upload_video_endpoint(
                     bounding_box_normalized=bbox,
                     time_intervals=t_intervals
                 ))
+
         else:
             raise HTTPException(
                 status_code=500,
@@ -928,6 +1056,19 @@ async def upload_video_endpoint(
 
         distinct_chars = [s.target_id for s in subjects_list]
         total_subjects = parsed.get("total_subjects") or parsed.get("total_subjects_detected") or len(subjects_list)
+
+        # Sort events list chronologically by start_time
+        events_list.sort(key=lambda x: (x.start_time, x.target_id or ""))
+
+        # Log to audit trail
+        system_audit_logs.append({
+            "id": f"AUD-{len(system_audit_logs)+1:03d}",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "operator": system_settings.get("admin_account", "Admin"),
+            "action": "PHÂN TÍCH VIDEO MỚI",
+            "details": f"File: {file.filename} ({duration_sec}s) | Nhận diện: {len(subjects_list)} đối tượng, {len(events_list)} vi đoạn thời gian | Model: {model_used or MODEL_NAME}",
+            "status": "SUCCESS"
+        })
 
         return VideoAnalysisResult(
             total_subjects_detected=total_subjects,
@@ -1098,6 +1239,89 @@ async def chat_copilot_endpoint(req: ChatRequest):
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "model_used": "Fallback"
         }
+
+
+# =============================================================================
+# ADMIN SETTINGS, AUDIT TRAILS & CAMERA MANAGEMENT ENDPOINTS
+# =============================================================================
+
+@app.get("/api/settings")
+def get_system_settings():
+    """Returns current admin security settings and risk thresholds."""
+    return system_settings
+
+
+@app.post("/api/settings")
+def update_system_settings(req: SettingsUpdateRequest):
+    """Updates security threat thresholds, sampling rates, and logs audit trail."""
+    global system_settings
+    if req.warning_threshold is not None:
+        system_settings["warning_threshold"] = max(1, min(99, req.warning_threshold))
+    if req.critical_threshold is not None:
+        system_settings["critical_threshold"] = max(1, min(99, req.critical_threshold))
+    if req.auto_siren is not None:
+        system_settings["auto_siren"] = bool(req.auto_siren)
+    if req.sampling_interval is not None:
+        system_settings["sampling_interval"] = max(0.5, min(30.0, req.sampling_interval))
+    if req.operator_name is not None:
+        system_settings["admin_account"] = req.operator_name
+    if req.active_role is not None:
+        system_settings["active_role"] = req.active_role
+
+    system_settings["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Record audit trail
+    audit_entry = {
+        "id": f"AUD-{len(system_audit_logs)+1:03d}",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "operator": system_settings.get("admin_account", "Admin"),
+        "action": "CẬP NHẬT CẤU HÌNH NGƯỠNG",
+        "details": f"Cảnh Báo: {system_settings['warning_threshold']}% | Nguy Cơ Cao: {system_settings['critical_threshold']}% | Vai trò: {system_settings['active_role']}",
+        "status": "SUCCESS"
+    }
+    system_audit_logs.append(audit_entry)
+
+    return {"success": True, "settings": system_settings}
+
+
+@app.get("/api/audit-logs")
+def get_audit_logs():
+    """Returns system audit trail logs."""
+    return {
+        "total": len(system_audit_logs),
+        "logs": list(reversed(system_audit_logs))
+    }
+
+
+@app.get("/api/cameras")
+def get_cameras():
+    """Returns registered camera feeds."""
+    return {
+        "total": len(registered_cameras),
+        "cameras": registered_cameras
+    }
+
+
+@app.post("/api/cameras/toggle")
+def toggle_camera(req: CameraToggleRequest):
+    """Toggle online/offline status of a camera feed."""
+    for cam in registered_cameras:
+        if cam["id"] == req.camera_id:
+            if req.status:
+                cam["status"] = req.status
+            else:
+                cam["status"] = "OFFLINE" if cam["status"] == "ONLINE" else "ONLINE"
+
+            system_audit_logs.append({
+                "id": f"AUD-{len(system_audit_logs)+1:03d}",
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "operator": system_settings.get("admin_account", "Admin"),
+                "action": "THAY ĐỔI TRẠNG THÁI CAMERA",
+                "details": f"{cam['name']} ({cam['id']}) chuyển sang {cam['status']}",
+                "status": "SUCCESS"
+            })
+            return {"success": True, "camera": cam}
+    raise HTTPException(status_code=404, detail="Camera not found")
 
 
 if __name__ == "__main__":

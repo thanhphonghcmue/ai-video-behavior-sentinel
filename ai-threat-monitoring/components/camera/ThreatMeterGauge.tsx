@@ -25,7 +25,7 @@ export const ThreatMeterGauge: React.FC<ThreatMeterGaugeProps> = ({ score, level
 
   // Color mapping
   const getColor = () => {
-    if (safeScore >= 80) return '#D70018'; // Alert Crimson Red
+    if (safeScore >= 80) return '#EA580C'; // Deep Coral-Orange (High Risk)
     if (safeScore >= 50) return '#F59E0B'; // Amber
     return '#10B981'; // Emerald
   };
@@ -36,14 +36,14 @@ export const ThreatMeterGauge: React.FC<ThreatMeterGaugeProps> = ({ score, level
     <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 flex flex-col items-center justify-between shadow-xs relative overflow-hidden">
       {/* Background glow when critical */}
       {safeScore >= 80 && (
-        <div className="absolute inset-0 bg-red-500/5 pointer-events-none animate-pulse" />
+        <div className="absolute inset-0 bg-orange-500/5 pointer-events-none animate-pulse" />
       )}
 
       {/* Header */}
       <div className="w-full flex items-center justify-between mb-1">
         <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
           {safeScore >= 80 ? (
-            <ShieldAlert className="w-4 h-4 text-brand-red animate-bounce" />
+            <ShieldAlert className="w-4 h-4 text-[#EA580C] animate-bounce" />
           ) : safeScore >= 50 ? (
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           ) : (
@@ -51,7 +51,7 @@ export const ThreatMeterGauge: React.FC<ThreatMeterGaugeProps> = ({ score, level
           )}
           Đồng Hồ Nguy Cơ (Threat Meter)
         </span>
-        <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+        <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full">
           Real-time AI
         </span>
       </div>
@@ -63,7 +63,7 @@ export const ThreatMeterGauge: React.FC<ThreatMeterGaugeProps> = ({ score, level
             <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#10B981" />
               <stop offset="50%" stopColor="#F59E0B" />
-              <stop offset="100%" stopColor="#D70018" />
+              <stop offset="100%" stopColor="#EA580C" />
             </linearGradient>
           </defs>
 
@@ -124,7 +124,7 @@ export const ThreatMeterGauge: React.FC<ThreatMeterGaugeProps> = ({ score, level
         <span
           className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase border ${
             level === 'CRITICAL'
-              ? 'bg-red-50 text-brand-red border-red-300 animate-pulse'
+              ? 'bg-orange-50 text-[#EA580C] border-orange-300 animate-pulse'
               : level === 'MEDIUM'
               ? 'bg-amber-50 text-amber-700 border-amber-300'
               : 'bg-emerald-50 text-emerald-700 border-emerald-200'

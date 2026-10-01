@@ -156,12 +156,12 @@ export default function LoginPage() {
 
         {/* Brand Header */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-brand-red flex items-center justify-center text-white shadow-lg shadow-brand-red/30">
+          <div className="w-12 h-12 rounded-2xl bg-[#2563EB] flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
             <ShieldAlert className="w-7 h-7" />
           </div>
           <div>
             <div className="text-white text-2xl font-black tracking-tight">
-              SENTINEL <span className="text-brand-red">AI</span>
+              SENTINEL <span className="text-blue-400">AI</span>
             </div>
             <p className="text-gray-400 text-xs font-semibold tracking-wider uppercase">
               Intelligent Threat & Behavior Surveillance System
@@ -171,15 +171,15 @@ export default function LoginPage() {
 
         {/* Center Poster Headline */}
         <div className="relative z-10 max-w-lg space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-red/20 border border-brand-red/40 text-red-400 text-xs font-bold uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-brand-red animate-ping" />
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-300 text-xs font-bold uppercase tracking-wider">
+            <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-ping" />
             Hệ Thống Giám Sát An Ninh Cấp Doanh Nghiệp
           </div>
           <h1 className="text-4xl xl:text-5xl font-black text-white leading-tight">
             Phân Tích Hành Vi & Đánh Giá Nguy Cơ Thời Gian Thực.
           </h1>
           <p className="text-gray-400 text-sm leading-relaxed">
-            Nền tảng giám sát thông minh thế hệ mới kết hợp <strong>YOLOv3 Object Detection</strong>, <strong>Lightweight OpenPose 18 khớp</strong> và mô hình đa phương thức <strong>Google Gemini 2.5 Flash</strong>.
+            Nền tảng giám sát thông minh thế hệ mới kết hợp <strong>YOLOv3 Object Detection</strong>, <strong>Lightweight OpenPose 18 khớp</strong> và mô hình đa phương thức <strong>Google Gemini 1.5 Pro & 3.8 Flash</strong>.
           </p>
         </div>
 
@@ -187,21 +187,21 @@ export default function LoginPage() {
         <div className="relative z-10 grid grid-cols-3 gap-4 border-t border-gray-800/80 pt-6">
           <div className="space-y-1">
             <div className="text-white text-sm font-bold flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-brand-red" />
+              <CheckCircle2 className="w-4 h-4 text-brand-blue" />
               YOLOv3 + OpenPose
             </div>
             <p className="text-[11px] text-gray-500">Phát hiện người & khớp cử chỉ 30 FPS</p>
           </div>
           <div className="space-y-1">
             <div className="text-white text-sm font-bold flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-brand-red" />
+              <CheckCircle2 className="w-4 h-4 text-brand-blue" />
               Virtual Fence (ROI)
             </div>
             <p className="text-[11px] text-gray-500">Vùng cấm đa giác tức thì</p>
           </div>
           <div className="space-y-1">
             <div className="text-white text-sm font-bold flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-brand-red" />
+              <CheckCircle2 className="w-4 h-4 text-brand-blue" />
               AI Threat Meter
             </div>
             <p className="text-[11px] text-gray-500">Thang đo nguy cơ 0 - 100% tự động</p>
@@ -214,7 +214,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-7">
           {/* Header Mobile Brand */}
           <div className="text-center space-y-2">
-            <div className="inline-flex lg:hidden w-12 h-12 rounded-2xl bg-brand-red items-center justify-center text-white mb-2 shadow-md">
+            <div className="inline-flex lg:hidden w-12 h-12 rounded-2xl bg-[#2563EB] items-center justify-center text-white mb-2 shadow-md">
               <ShieldAlert className="w-6 h-6" />
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
@@ -245,7 +245,7 @@ export default function LoginPage() {
                   }}
                   className={`p-2.5 rounded-xl border text-center transition-all ${
                     selectedRole === item.role
-                      ? 'bg-red-50 text-brand-red border-brand-red font-bold shadow-xs'
+                      ? 'bg-blue-50 text-brand-blue border-brand-blue font-bold shadow-xs'
                       : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                   }`}
                 >
@@ -270,7 +270,7 @@ export default function LoginPage() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full text-xs pl-10 pr-3.5 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-brand-red font-medium transition-colors bg-white text-gray-900"
+                  className="w-full text-xs pl-10 pr-3.5 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-brand-blue font-medium transition-colors bg-white text-gray-900"
                 />
               </div>
             </div>
@@ -279,7 +279,7 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-gray-700">Mật mã xác thực:</label>
-                <a href="#" className="text-[11px] text-brand-red hover:underline font-medium">
+                <a href="#" className="text-[11px] text-brand-blue hover:underline font-medium">
                   Quên mật mã?
                 </a>
               </div>
@@ -292,7 +292,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full text-xs pl-10 pr-10 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-brand-red font-medium transition-colors bg-white text-gray-900"
+                  className="w-full text-xs pl-10 pr-10 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-brand-blue font-medium transition-colors bg-white text-gray-900"
                 />
                 <button
                   type="button"
@@ -310,7 +310,7 @@ export default function LoginPage() {
                 <input
                   type="checkbox"
                   defaultChecked
-                  className="rounded border-gray-300 text-brand-red focus:ring-brand-red"
+                  className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
                 />
                 <span>Duy trì đăng nhập trong 24 giờ</span>
               </label>
@@ -320,7 +320,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 px-4 rounded-xl bg-brand-red hover:bg-brand-darkRed text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-red/30 active:scale-98 disabled:opacity-70"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/25 active:scale-98 disabled:opacity-70"
             >
               {isLoading ? (
                 <span>Đang kết nối trung tâm an ninh...</span>

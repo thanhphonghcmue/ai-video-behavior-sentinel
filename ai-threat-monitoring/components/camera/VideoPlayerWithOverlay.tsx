@@ -330,7 +330,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
         }
 
         ctx.setLineDash([8, 6]);
-        ctx.strokeStyle = insideROI ? '#FF0020' : '#D70018';
+        ctx.strokeStyle = insideROI ? '#EA580C' : '#F97316';
         ctx.lineWidth = insideROI ? 3 : 2;
         ctx.stroke();
 
@@ -338,7 +338,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           ctx.setLineDash([]);
           ctx.beginPath();
           ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-          ctx.fillStyle = '#D70018';
+          ctx.fillStyle = '#EA580C';
           ctx.fill();
           ctx.strokeStyle = '#FFFFFF';
           ctx.lineWidth = 1.5;
@@ -348,7 +348,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
         if (roiPolygon.length >= 3) {
           const first = roiPolygon[0];
           ctx.font = 'bold 11px sans-serif';
-          ctx.fillStyle = '#D70018';
+          ctx.fillStyle = '#EA580C';
           ctx.fillRect(first.x, first.y - 22, 180, 20);
           ctx.fillStyle = '#FFFFFF';
           ctx.fillText('⚠ VÙNG CẤM ROI (VIRTUAL FENCE)', first.x + 6, first.y - 8);
@@ -395,7 +395,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           ctx.beginPath();
           ctx.moveTo(ptA.x, ptA.y);
           ctx.lineTo(ptB.x, ptB.y);
-          ctx.strokeStyle = (insideROI || threatResult.score >= 80) ? '#D70018' : (from <= 7 ? '#06B6D4' : '#10B981');
+          ctx.strokeStyle = (insideROI || threatResult.score >= 80) ? '#EA580C' : (from <= 7 ? '#06B6D4' : '#10B981');
           ctx.lineWidth = 3.5;
           ctx.lineCap = 'round';
           ctx.stroke();
@@ -404,7 +404,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
         Object.values(kp).forEach((joint) => {
           ctx.beginPath();
           ctx.arc(joint.x, joint.y, 4.5, 0, Math.PI * 2);
-          ctx.fillStyle = insideROI ? '#D70018' : '#00F0FF';
+          ctx.fillStyle = insideROI ? '#EA580C' : '#00F0FF';
           ctx.fill();
           ctx.strokeStyle = '#FFFFFF';
           ctx.lineWidth = 1.5;
@@ -416,7 +416,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
       // 4. Draw YOLOv3 / Face Bounding Box & HUD
       if (showBoundingBox) {
         ctx.save();
-        const boxColor = threatResult.score >= 80 ? '#D70018' : threatResult.score >= 50 ? '#F59E0B' : '#10B981';
+        const boxColor = threatResult.score >= 80 ? '#EA580C' : threatResult.score >= 50 ? '#F59E0B' : '#10B981';
 
         ctx.strokeStyle = boxColor;
         ctx.lineWidth = insideROI ? 3 : 2;
@@ -543,7 +543,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
         {/* Live Status Indicators */}
         <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-bold">
-            <span className="w-2 h-2 rounded-full bg-brand-red animate-ping" />
+            <span className="w-2 h-2 rounded-full bg-[#EA580C] animate-ping" />
             <span>REC LIVE</span>
           </div>
           <div className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-gray-200 text-xs font-mono flex items-center gap-1.5">
@@ -553,7 +553,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           {isCloudGeminiActive && (
             <div className="px-2.5 py-0.5 rounded-full bg-blue-600/90 backdrop-blur-md text-white text-[10px] font-bold flex items-center gap-1">
               <CloudLightning className="w-3 h-3" />
-              <span>Gemini 2.5 Flash</span>
+              <span>Gemini Vision</span>
             </div>
           )}
           {isAutoScanActive && (
@@ -565,7 +565,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
         </div>
 
         {isDrawingROI && (
-          <div className="absolute top-3 right-3 z-20 bg-brand-red text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-lg flex items-center gap-2 animate-bounce">
+          <div className="absolute top-3 right-3 z-20 bg-[#EA580C] text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-lg flex items-center gap-2 animate-bounce">
             <Edit3 className="w-4 h-4" />
             <span>Nhấp vào màn hình để chấm các góc vùng cấm ROI</span>
           </div>
@@ -585,7 +585,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           <button
             onClick={() => setShowSkeleton(!showSkeleton)}
             className={`px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 border transition-all ${
-              showSkeleton ? 'bg-red-50 text-brand-red border-red-200 font-bold' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              showSkeleton ? 'bg-blue-50 text-brand-blue border-blue-200 font-bold' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -595,7 +595,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           <button
             onClick={() => setShowBoundingBox(!showBoundingBox)}
             className={`px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 border transition-all ${
-              showBoundingBox ? 'bg-red-50 text-brand-red border-red-200 font-bold' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              showBoundingBox ? 'bg-blue-50 text-brand-blue border-blue-200 font-bold' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}
           >
             {showBoundingBox ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -605,7 +605,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           <button
             onClick={() => setShowROI(!showROI)}
             className={`px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 border transition-all ${
-              showROI ? 'bg-red-50 text-brand-red border-red-200 font-bold' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              showROI ? 'bg-orange-50 text-[#EA580C] border-orange-200 font-bold' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
@@ -622,14 +622,14 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
               }}
               className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold flex items-center gap-1.5 border border-gray-300 transition-colors"
             >
-              <Edit3 className="w-3.5 h-3.5 text-brand-red" />
+              <Edit3 className="w-3.5 h-3.5 text-[#EA580C]" />
               <span>Vẽ Vùng Cấm</span>
             </button>
           ) : (
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsDrawingROI(false)}
-                className="px-3 py-1.5 rounded-xl bg-brand-red text-white font-bold flex items-center gap-1 shadow-xs"
+                className="px-3 py-1.5 rounded-xl bg-[#EA580C] text-white font-bold flex items-center gap-1 shadow-xs"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Xong ({roiPolygon.length} điểm)</span>
@@ -647,7 +647,7 @@ export const VideoPlayerWithOverlay: React.FC<VideoPlayerWithOverlayProps> = ({
           <button
             onClick={triggerAiVisionScan}
             disabled={isAiScanning}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-brand-red to-brand-darkRed text-white font-bold flex items-center gap-1.5 transition-all shadow-sm shadow-brand-red/30 active:scale-95 disabled:opacity-60"
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold flex items-center gap-1.5 transition-all shadow-sm shadow-blue-500/25 active:scale-95 disabled:opacity-60"
           >
             {isAiScanning ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />

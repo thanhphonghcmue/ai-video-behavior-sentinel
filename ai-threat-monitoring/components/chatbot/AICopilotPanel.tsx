@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { 
@@ -137,9 +137,9 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
   return (
     <div className="w-[360px] flex flex-col h-full bg-white rounded-2xl border border-[#E5E7EB] shadow-xs overflow-hidden">
       {/* 1. Panel Header */}
-      <div className="p-4 border-b border-[#E5E7EB] bg-gradient-to-r from-red-50/50 to-white flex items-center justify-between">
+      <div className="p-4 border-b border-[#E5E7EB] bg-gradient-to-r from-blue-50/50 to-white flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-brand-red flex items-center justify-center text-white shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-[#2563EB] flex items-center justify-center text-white shadow-xs">
             <Bot className="w-4 h-4" />
           </div>
           <div>
@@ -175,11 +175,11 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
       <div className="p-3 bg-gray-50/80 border-b border-[#E5E7EB] space-y-2">
         <div className="flex items-center justify-between text-[11px] font-bold text-gray-700">
           <span className="flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5 text-brand-red" />
+            <Activity className="w-3.5 h-3.5 text-brand-blue" />
             Tóm Tắt Hành Vi Trực Tiếp (Live Feed)
           </span>
           <span className="text-[10px] font-mono text-gray-500 font-normal">
-            Gemini 2.5 Flash
+            Gemini Vision
           </span>
         </div>
 
@@ -203,7 +203,7 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
             <span className="text-gray-500 block text-[10px]">Điểm nguy cơ tức thì:</span>
             <span
               className={`font-black font-mono text-xs flex items-center gap-1 ${
-                threatScore >= 80 ? 'text-brand-red animate-pulse' : threatScore >= 50 ? 'text-amber-600' : 'text-emerald-600'
+                threatScore >= 80 ? 'text-[#EA580C] animate-pulse' : threatScore >= 50 ? 'text-amber-600' : 'text-emerald-600'
               }`}
             >
               <ShieldAlert className="w-3.5 h-3.5" />
@@ -215,7 +215,7 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
             <span className="text-gray-500 block text-[10px]">Ranh giới Vùng Cấm:</span>
             <span
               className={`font-bold flex items-center gap-1 ${
-                currentPerson?.isInROI ? 'text-brand-red animate-bounce' : 'text-emerald-600'
+                currentPerson?.isInROI ? 'text-[#EA580C] animate-bounce' : 'text-emerald-600'
               }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -238,7 +238,7 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
               {isAi && (
                 <div
                   className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold ${
-                    isCrit ? 'bg-brand-red ring-2 ring-red-300' : 'bg-brand-red'
+                    isCrit ? 'bg-[#EA580C] ring-2 ring-orange-300' : 'bg-brand-blue'
                   }`}
                 >
                   AI
@@ -248,13 +248,13 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
                 className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
                   isAi
                     ? isCrit
-                      ? 'bg-red-50 text-gray-900 border border-red-300 shadow-xs'
-                      : 'bg-gray-100 text-gray-800 border border-gray-200/80'
-                    : 'bg-brand-red text-white shadow-xs'
+                    ? 'bg-orange-50 text-gray-900 border border-orange-300 shadow-xs'
+                    : 'bg-gray-100 text-gray-800 border border-gray-200/80'
+                  : 'bg-[#2563EB] text-white shadow-xs'
                 }`}
               >
                 <div className="whitespace-pre-line">{msg.text}</div>
-                <div className={`text-[9px] mt-1 text-right font-mono ${isAi ? 'text-gray-400' : 'text-red-100'}`}>
+                <div className={`text-[9px] mt-1 text-right font-mono ${isAi ? 'text-gray-400' : 'text-blue-100'}`}>
                   {msg.timestamp}
                 </div>
               </div>
@@ -264,7 +264,7 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
 
         {isTyping && (
           <div className="flex gap-2 items-center text-xs text-gray-400 animate-pulse">
-            <div className="w-6 h-6 rounded-full bg-brand-red text-white flex items-center justify-center text-[10px]">
+            <div className="w-6 h-6 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-[10px]">
               AI
             </div>
             <div className="bg-gray-100 px-3 py-2 rounded-2xl border border-gray-200 text-gray-500 text-[11px]">
@@ -294,12 +294,12 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
             value={inputQuery}
             onChange={(e) => setInputQuery(e.target.value)}
             placeholder="Hỏi Gemini AI về hành vi đối tượng..."
-            className="flex-1 text-xs px-3.5 py-2.5 bg-gray-100 rounded-xl border border-gray-200 focus:outline-none focus:border-brand-red focus:bg-white transition-colors"
+            className="flex-1 text-xs px-3.5 py-2.5 bg-gray-100 rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue focus:bg-white transition-colors"
           />
           <button
             type="submit"
             disabled={!inputQuery.trim() || isTyping}
-            className="w-9 h-9 rounded-xl bg-brand-red text-white flex items-center justify-center hover:bg-brand-darkRed transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
+            className="w-9 h-9 rounded-xl bg-[#2563EB] text-white flex items-center justify-center hover:bg-[#1D4ED8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
           >
             <Send className="w-4 h-4" />
           </button>
@@ -310,7 +310,7 @@ export const AICopilotPanel: React.FC<AICopilotPanelProps> = ({
       <div className="p-3 bg-gray-100/80 border-t border-[#E5E7EB] space-y-2">
         <button
           onClick={onTriggerEmergencySiren}
-          className="w-full py-2.5 px-4 rounded-xl bg-brand-red hover:bg-brand-darkRed text-white font-bold text-xs uppercase tracking-wide flex items-center justify-center gap-2 shadow-md shadow-brand-red/30 transition-all active:scale-98 animate-pulse"
+          className="w-full py-2.5 px-4 rounded-xl bg-[#EA580C] hover:bg-orange-700 text-white font-bold text-xs uppercase tracking-wide flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 transition-all active:scale-98 animate-pulse"
         >
           <Volume2 className="w-4 h-4 animate-bounce" />
           <span>CÒI BÁO ĐỘNG KHẨN CẤP</span>

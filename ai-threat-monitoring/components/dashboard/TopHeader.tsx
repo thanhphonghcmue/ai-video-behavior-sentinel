@@ -18,7 +18,10 @@ import {
   Cpu,
   Layers,
   ChevronDown,
-  UserCheck
+  UserCheck,
+  Shield,
+  Settings,
+  Sliders
 } from 'lucide-react';
 import { ThreatLevel } from '@/lib/types';
 
@@ -50,8 +53,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [isGeminiOnline, setIsGeminiOnline] = useState<boolean>(false);
   const [currentBackendModel, setCurrentBackendModel] = useState<string>(activeModel);
+  const [activeRole, setActiveRole] = useState<string>('Quản Trị Viên (Root Admin)');
+  const [isRoleMenuOpen, setIsRoleMenuOpen] = useState<boolean>(false);
 
-  // Poll backend status
+  // Poll backend status & settings
   const checkStatus = async () => {
     try {
       const res = await fetch('http://localhost:8000/api/status');
@@ -62,8 +67,29 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           setCurrentBackendModel(data.model);
         }
       }
+      const settingsRes = await fetch('http://localhost:8000/api/settings');
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.active_role) {
+          setActiveRole(settingsData.active_role);
+        }
+      }
     } catch (err) {
       // Backend offline
+    }
+  };
+
+  const handleRoleChange = async (newRole: string) => {
+    setActiveRole(newRole);
+    setIsRoleMenuOpen(false);
+    try {
+      await fetch('http://localhost:8000/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active_role: newRole }),
+      });
+    } catch (err) {
+      // Offline fallback
     }
   };
 
@@ -234,15 +260,118 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <span className="hidden sm:inline">Còi Báo Động</span>
         </button>
 
-        {/* User Profile Pill in Topbar */}
-        <div className="hidden md:flex items-center gap-2 pl-2 border-l border-gray-200">
-          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-blue-100 shadow-xs">
-            LP
-          </div>
-          <div className="text-left text-[11px]">
-            <p className="font-bold text-[#0F172A] leading-tight">Lâm Thanh Phong</p>
-            <p className="text-[10px] text-gray-500 font-mono">50.01.103.057</p>
-          </div>
+        {/* Admin Account & Role Switcher Dropdown */}
+        <div className="relative pl-2 border-l border-gray-200">
+          <button
+            onClick={() => setIsRoleMenuOpen(!isRoleMenuOpen)}
+            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100/80 border border-transparent hover:border-slate-200 transition-all text-left"
+            title="Tài khoản Quản trị & Chuyển đổi vai trò ca trực"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-700 to-indigo-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-blue-100 shadow-xs flex-shrink-0">
+              LP
+            </div>
+            <div className="hidden lg:block text-left text-[11px]">
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-[#0F172A] leading-tight">Lâm Thanh Phong</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-brand-blue font-bold">
+                  {activeRole.includes('Admin') ? 'ADMIN' : activeRole.includes('Operator') ? 'OPERATOR' : 'AUDITOR'}
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500 font-mono">50.01.103.057 • HCMUE</p>
+            </div>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isRoleMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Role Switcher Dropdown Menu */}
+          {isRoleMenuOpen && (
+            <>
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={() => setIsRoleMenuOpen(false)} 
+              />
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-[#E2E8F0] shadow-xl z-50 p-3.5 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
+                {/* User Identity Header */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                      LP
+                    </div>
+                    <div>
+                      <h4 className="font-black text-xs text-[#0F172A]">Lâm Thanh Phong</h4>
+                      <p className="text-[10px] text-gray-500 font-mono">MSSV: 50.01.103.057</p>
+                      <p className="text-[10px] text-brand-blue font-semibold">Trường ĐH Sư Phạm TP.HCM (HCMUE)</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role Switcher Section */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">
+                    Chuyển Đổi Quyền Hạn Ca Trực:
+                  </p>
+
+                  {[
+                    {
+                      id: 'Quản Trị Viên (Root Admin)',
+                      label: 'Quản Trị Viên (Root Admin)',
+                      desc: 'Cấu hình AI, điều chỉnh ngưỡng rủi ro, quản lý luồng camera.',
+                      icon: ShieldCheck,
+                    },
+                    {
+                      id: 'Chuyên Viên An Ninh (Security Operator)',
+                      label: 'Chuyên Viên An Ninh (Operator)',
+                      desc: 'Theo dõi ca trực, kích hoạt còi báo động, xác nhận sự cố.',
+                      icon: ShieldAlert,
+                    },
+                    {
+                      id: 'Thanh Tra & Kiểm Toán (Compliance Auditor)',
+                      label: 'Thanh Tra Kiểm Toán (Auditor)',
+                      desc: 'Xem và xuất nhật ký audit log, đối soát lịch sử sự cố.',
+                      icon: UserCheck,
+                    }
+                  ].map((role) => {
+                    const isSelected = activeRole === role.id;
+                    const IconComp = role.icon;
+                    return (
+                      <button
+                        key={role.id}
+                        onClick={() => handleRoleChange(role.id)}
+                        className={`w-full text-left p-2.5 rounded-xl border transition-all ${
+                          isSelected
+                            ? 'border-brand-blue bg-blue-50/70 ring-1 ring-blue-500/20'
+                            : 'border-gray-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <IconComp className={`w-3.5 h-3.5 ${isSelected ? 'text-brand-blue' : 'text-gray-500'}`} />
+                            <span className="font-bold text-xs text-[#0F172A]">{role.label}</span>
+                          </div>
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-brand-blue" />}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1 leading-snug pl-5.5">{role.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Quick Link to Page 4 Admin Hub */}
+                <div className="pt-1 border-t border-gray-100 flex flex-col gap-1.5 text-xs">
+                  <Link
+                    href="/dashboard/nhat-ky-canh-bao"
+                    onClick={() => setIsRoleMenuOpen(false)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-brand-blue text-[#0F172A] font-bold text-[11px] transition-all"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5" />
+                      Trung Tâm Quản Trị & Cấu Hình Ngưỡng
+                    </span>
+                    <ExternalLink className="w-3 h-3 opacity-60" />
+                  </Link>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

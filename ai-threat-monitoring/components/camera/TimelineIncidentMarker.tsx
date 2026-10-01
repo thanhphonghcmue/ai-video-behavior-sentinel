@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import { IncidentEvent } from '@/lib/types';
@@ -29,11 +29,11 @@ export const TimelineIncidentMarker: React.FC<TimelineIncidentMarkerProps> = ({
     <div className="w-full bg-white rounded-2xl border border-[#E5E7EB] p-3 shadow-xs space-y-2">
       <div className="flex items-center justify-between text-xs text-gray-600">
         <div className="flex items-center gap-1.5 font-bold text-gray-800">
-          <Clock className="w-3.5 h-3.5 text-brand-red" />
+          <Clock className="w-3.5 h-3.5 text-brand-blue" />
           <span>Timeline Sự Cố Video</span>
         </div>
         <div className="font-mono text-[11px] text-gray-500">
-          <span className="font-bold text-brand-red">{formatTime(currentTimeSec)}</span> /{' '}
+          <span className="font-bold text-brand-blue">{formatTime(currentTimeSec)}</span> /{' '}
           {formatTime(durationSec)}
         </div>
       </div>
@@ -50,13 +50,13 @@ export const TimelineIncidentMarker: React.FC<TimelineIncidentMarkerProps> = ({
       >
         {/* Played Bar */}
         <div
-          className="absolute left-0 top-0 bottom-0 bg-brand-red/20 rounded-lg transition-all"
+          className="absolute left-0 top-0 bottom-0 bg-blue-600/20 rounded-lg transition-all"
           style={{ width: `${progressPercent}%` }}
         />
 
         {/* Current Head */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-brand-red rounded-full ring-2 ring-white shadow-md z-20 pointer-events-none transition-all"
+          className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-[#2563EB] rounded-full ring-2 ring-white shadow-md z-20 pointer-events-none transition-all"
           style={{ left: `calc(${progressPercent}% - 7px)` }}
         />
 
@@ -76,7 +76,7 @@ export const TimelineIncidentMarker: React.FC<TimelineIncidentMarkerProps> = ({
             >
               <div
                 className={`w-1.5 h-4 rounded-full ${
-                  isCrit ? 'bg-brand-red animate-pulse' : 'bg-amber-500'
+                  isCrit ? 'bg-[#EA580C] animate-pulse' : 'bg-amber-500'
                 }`}
               />
 
@@ -97,13 +97,13 @@ export const TimelineIncidentMarker: React.FC<TimelineIncidentMarkerProps> = ({
       <div className="flex items-center justify-between text-[10px] text-gray-500 px-1 pt-1">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-brand-red"></span> Vạch Đỏ: Nguy cơ cao (&gt;80%)
+            <span className="w-2 h-2 rounded-full bg-[#EA580C]"></span> Vạch Cam: Nguy cơ cao (&gt;80%)
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-amber-500"></span> Vạch Vàng: Đáng ngờ (50-80%)
           </span>
         </div>
-        <span className="italic">Nhấp vào vạch đỏ để chuyển nhanh tới sự cố</span>
+        <span className="italic">Nhấp vào vạch mốc để chuyển nhanh tới sự cố</span>
       </div>
     </div>
   );

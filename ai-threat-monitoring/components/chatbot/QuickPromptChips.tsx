@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import { Sparkles } from 'lucide-react';
@@ -23,7 +23,7 @@ export const QuickPromptChips: React.FC<QuickPromptChipsProps> = ({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500">
-        <Sparkles className="w-3 h-3 text-brand-red" />
+        <Sparkles className="w-3 h-3 text-brand-blue" />
         <span>Câu Hỏi Gợi Ý Nhanh:</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -32,7 +32,7 @@ export const QuickPromptChips: React.FC<QuickPromptChipsProps> = ({
             key={index}
             disabled={disabled}
             onClick={() => onSelectPrompt(item.query)}
-            className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-700 hover:border-brand-red hover:text-brand-red hover:bg-red-50/50 transition-all shadow-2xs disabled:opacity-50 active:scale-95"
+            className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-700 hover:border-brand-blue hover:text-brand-blue hover:bg-blue-50/50 transition-all shadow-2xs disabled:opacity-50 active:scale-95"
           >
             {item.label}
           </button>

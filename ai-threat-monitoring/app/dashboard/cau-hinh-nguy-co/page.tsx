@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { Settings2, Save, RotateCcw, Sliders, ShieldAlert, Cpu } from 'lucide-react';
@@ -17,7 +17,7 @@ export default function ThreatConfigPage() {
       <div className="bg-white p-5 rounded-2xl border border-gray-200 flex items-center justify-between shadow-xs">
         <div>
           <h1 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-            <Settings2 className="w-5 h-5 text-brand-red" />
+            <Settings2 className="w-5 h-5 text-brand-blue" />
             Cấu Hình Ngưỡng Nguy Cơ & Vùng Cấm ROI (AI Security Engine)
           </h1>
           <p className="text-xs text-gray-500">
@@ -27,7 +27,7 @@ export default function ThreatConfigPage() {
 
         <button
           onClick={() => alert('Đã lưu cấu hình ngưỡng AI thành công!')}
-          className="px-4 py-2 rounded-xl bg-brand-red text-white text-xs font-bold hover:bg-brand-darkRed flex items-center gap-2 shadow-xs transition-colors"
+          className="px-4 py-2 rounded-xl bg-[#2563EB] text-white text-xs font-bold hover:bg-[#1D4ED8] flex items-center gap-2 shadow-xs transition-colors"
         >
           <Save className="w-4 h-4" />
           <span>Lưu Thiết Lập</span>
@@ -39,15 +39,15 @@ export default function ThreatConfigPage() {
         {/* 1. Ngưỡng Rủi Ro Cảnh Báo */}
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
           <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-brand-red" />
+            <Sliders className="w-4 h-4 text-brand-blue" />
             Ngưỡng Thang Đo Nguy Cơ (Threat Thresholds)
           </h3>
 
           <div className="space-y-3 text-xs">
             <div>
               <div className="flex justify-between font-semibold mb-1">
-                <span>Ngưỡng Báo Động Nguy Cấp (Đỏ):</span>
-                <span className="font-mono text-brand-red font-bold">&gt;= {criticalThreshold}%</span>
+                <span>Ngưỡng Báo Động Nguy Cấp:</span>
+                <span className="font-mono text-[#EA580C] font-bold">&gt;= {criticalThreshold}%</span>
               </div>
               <input
                 type="range"
@@ -55,7 +55,7 @@ export default function ThreatConfigPage() {
                 max="95"
                 value={criticalThreshold}
                 onChange={(e) => setCriticalThreshold(Number(e.target.value))}
-                className="w-full accent-brand-red"
+                className="w-full accent-orange-600"
               />
               <span className="text-[10px] text-gray-400">
                 Khi điểm nguy cơ vượt ngưỡng này, còi báo động và đèn nhấp nháy sẽ được kích hoạt.
@@ -85,7 +85,7 @@ export default function ThreatConfigPage() {
         {/* 2. Cài Đặt Vùng Cấm ROI & Dwell Time */}
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
           <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-brand-red" />
+            <ShieldAlert className="w-4 h-4 text-brand-blue" />
             Quy Chuẩn Vùng Cấm Ảo (ROI Settings)
           </h3>
 
@@ -93,7 +93,7 @@ export default function ThreatConfigPage() {
             <div>
               <div className="flex justify-between font-semibold mb-1">
                 <span>Độ nhạy va chạm đường biên ROI:</span>
-                <span className="font-mono text-brand-red font-bold">{roiSensitivity}%</span>
+                <span className="font-mono text-[#EA580C] font-bold">{roiSensitivity}%</span>
               </div>
               <input
                 type="range"
@@ -101,7 +101,7 @@ export default function ThreatConfigPage() {
                 max="100"
                 value={roiSensitivity}
                 onChange={(e) => setRoiSensitivity(Number(e.target.value))}
-                className="w-full accent-brand-red"
+                className="w-full accent-blue-600"
               />
               <span className="text-[10px] text-gray-400">
                 Thuật toán Ray-Casting đa giác kiểm tra tọa độ hai bàn chân đối tượng.
@@ -119,7 +119,7 @@ export default function ThreatConfigPage() {
                 max="30"
                 value={dwellLimitSec}
                 onChange={(e) => setDwellLimitSec(Number(e.target.value))}
-                className="w-full accent-brand-red"
+                className="w-full accent-blue-600"
               />
               <span className="text-[10px] text-gray-400">
                 Nếu đối tượng dừng lại quá thời gian này trong vùng nhạy cảm, điểm đe dọa sẽ tăng thêm 35%.
@@ -141,7 +141,7 @@ export default function ThreatConfigPage() {
               type="checkbox"
               checked={enableAutoSnapshot}
               onChange={(e) => setEnableAutoSnapshot(e.target.checked)}
-              className="rounded text-brand-red focus:ring-brand-red w-4 h-4"
+              className="rounded text-brand-blue focus:ring-brand-blue w-4 h-4"
             />
             <div>
               <span className="font-bold text-gray-800 block">Tự động chụp Snapshot vi phạm</span>
@@ -154,7 +154,7 @@ export default function ThreatConfigPage() {
               type="checkbox"
               checked={enableSoundSiren}
               onChange={(e) => setEnableSoundSiren(e.target.checked)}
-              className="rounded text-brand-red focus:ring-brand-red w-4 h-4"
+              className="rounded text-brand-blue focus:ring-brand-blue w-4 h-4"
             />
             <div>
               <span className="font-bold text-gray-800 block">Bật còi hú âm lượng cao</span>
