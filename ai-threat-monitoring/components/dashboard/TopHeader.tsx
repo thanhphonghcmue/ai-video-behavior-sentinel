@@ -150,7 +150,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   return (
     <header 
       className={`h-16 bg-white border-b border-[#E2E8F0] px-5 flex items-center justify-between sticky top-0 z-30 transition-all duration-300 shadow-xs ${
-        isSidebarCollapsed ? 'ml-18' : 'ml-64'
+        isSidebarCollapsed ? 'ml-20' : 'ml-64'
       }`}
     >
       {/* Left: Sidebar Toggle + Title */}

@@ -51,7 +51,7 @@ load_dotenv()
 
 # Setup Google GenAI Client
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 genai_client = None
 
@@ -504,12 +504,12 @@ async def background_sampling_task():
                         "dwell_time": int(time.time() - camera_manager.start_dwell_time)
                     }
 
-                # Periodic Gemini analysis
+                # Periodic Gemini analysis in background thread to avoid event loop blocking
                 if genai_client:
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     small_frame = cv2.resize(rgb, (640, 360))
                     pil_img = Image.fromarray(small_frame)
-                    result = analyze_frame_with_gemini(pil_img)
+                    result = await asyncio.to_thread(analyze_frame_with_gemini, pil_img)
                     result["timestamp"] = datetime.now().isoformat()
                     latest_telemetry.update(result)
 
@@ -521,8 +521,11 @@ async def background_sampling_task():
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(background_sampling_task())
-    print("[SERVER] Background AI frame sampling task launched.")
+    async def delayed_start():
+        await asyncio.sleep(3)
+        await background_sampling_task()
+    asyncio.create_task(delayed_start())
+    print("[SERVER] Background AI frame sampling task scheduled.")
 
 
 # =============================================================================
@@ -741,316 +744,232 @@ async def upload_video_endpoint(
     # Determine dynamic video URL
     host_header = request.headers.get("host", "localhost:8000")
     video_url = f"http://{host_header}/uploads/{unique_filename}"
-    events_list: List[VideoActionEvent] = []
-    distinct_chars: List[str] = []
-    scene_summary = "Khung cảnh giám sát ghi nhận các chủ thể hoạt động trong phạm vi an ninh."
-    model_used = MODEL_NAME if genai_client else "Offline CV Heuristic (Chưa có Gemini API Key)"
 
-    # Branch A: Use Google GenAI File API if connected
-    if genai_client:
-        try:
-            print(f"[MODULE 1] Uploading {unique_filename} ({duration_sec}s) to Google AI Studio File API...")
-            uploaded_file = genai_client.files.upload(file=saved_path)
+    # Strict Error Handling: Missing API Key or Client
+    if not genai_client or not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Missing API Key or Gemini Connection Failed",
+                "detail": "GEMINI_API_KEY is not configured or Client initialization failed. Mock data is disabled."
+            }
+        )
 
-            # Poll processing status until ACTIVE
-            wait_time = 0
-            while hasattr(uploaded_file, "state") and getattr(uploaded_file.state, "name", "") in ["PROCESSING", "STATE_UNSPECIFIED"] and wait_time < 90:
-                time.sleep(2)
-                wait_time += 2
-                uploaded_file = genai_client.files.get(name=uploaded_file.name)
-                print(f"[MODULE 1] Polling Google AI Studio file state: {getattr(uploaded_file.state, 'name', 'UNKNOWN')} ({wait_time}s)")
+    # Real connection to Google Gemini API (No mock data fallback)
+    try:
+        print(f"[MODULE 1] Uploading {unique_filename} ({duration_sec}s) to Google AI Studio File API...")
+        uploaded_file = genai_client.files.upload(file=saved_path)
 
-            prompt = f"""
-            You are an expert AI Video Surveillance & Dense-Scene Multi-Subject Computer Vision Specialist.
-            Analyze this uploaded video footage comprehensively from 0.0s to {duration_sec}s.
+        # Poll processing status until ACTIVE
+        wait_time = 0
+        while hasattr(uploaded_file, "state") and getattr(uploaded_file.state, "name", "") in ["PROCESSING", "STATE_UNSPECIFIED"] and wait_time < 90:
+            time.sleep(2)
+            wait_time += 2
+            uploaded_file = genai_client.files.get(name=uploaded_file.name)
+            print(f"[MODULE 1] Polling Google AI Studio file state: {getattr(uploaded_file.state, 'name', 'UNKNOWN')} ({wait_time}s)")
 
-            CORE REQUIREMENTS:
-            1. DENSE-SCENE MULTI-SUBJECT DETECTION:
-               - Do NOT limit or restrict detection to only 1 or 2 subjects.
-               - Detect ALL active visible entities (persons, vehicles, motorbikes, pedestrians) throughout the entire scene.
-               - Assign structured IDs: "Target_01", "Target_02", "Target_03", "Target_04", etc.
-               - Classify each entity type: "Person", "Motorbike", "Vehicle", "Pedestrian", "Bicycle", etc.
-               - Provide normalized bounding box coordinates for each subject in [ymin, xmin, ymax, xmax] format where coordinates are integers from 0 to 1000.
+        prompt = f"""
+        Analyze this video accurately. Describe the ACTUAL visual context. Do NOT assume it is a traffic or parking scene. Identify all distinct humans, vehicles, or entities. Return structured JSON with a 'scene_summary', 'total_subjects', and a 'subjects' array containing 'target_id' and 'time_intervals' with normalized bounding boxes [ymin, xmin, ymax, xmax].
 
-            2. DYNAMIC ACTION EVENT SLICING (NO ARBITRARY INTERVALS):
-               - DO NOT divide by fixed 5-second or 10-second intervals.
-               - Segment dynamic time intervals based strictly on actual physical actions performed by each subject (from start_time to end_time as float seconds).
-               - Accurately describe real scene behavior:
-                 * Outdoor traffic/street/bridge: motorbike riding, lane navigation, acceleration, braking, crossing, walking.
-                 * Indoor/commercial/office: walking, entering, inspecting objects, reaching, loitering, pausing.
+        DETAILED SPECIFICATIONS:
+        1. Context & Entities:
+           - Ground your analysis 100% on the visible pixels. If the video is a classroom/teacher, identify Teacher, Students, Whiteboard, Desks, etc. If it is an office, store, or warehouse, identify the actual persons and activities.
+           - Assign IDs: "Target_01", "Target_02", etc.
+           - Classify each entity type accurately: "Teacher", "Student", "Person", "Employee", "Visitor", etc.
 
-            3. RISK & THREAT ASSESSMENT:
-               - risk_score: integer from 0 to 100.
-                 * Normal lawful movement / walking: 10 - 35
-                 * Unusual hesitation, rapid lane cutting, lingering: 40 - 69
-                 * Reckless collision hazard, restricted intrusion, fighting: 70 - 100
-               - risk_level: "LOW" (0-39), "MEDIUM" (40-69), or "CRITICAL" (70-100).
-               - is_danger: true if risk_score >= 70, false otherwise.
+        2. Normalized Bounding Boxes:
+           - Provide normalized coordinates [ymin, xmin, ymax, xmax] as float numbers strictly between 0.0 and 1.0 (relative to the video dimensions).
+           - ymin, xmin is top-left corner; ymax, xmax is bottom-right corner.
 
-            4. SCENE SUMMARY:
-               - Provide a concise summary of the overall scene in Vietnamese.
+        3. Dynamic Time Intervals:
+           - Segment natural action boundaries (from start_time to end_time as float seconds up to {duration_sec}s).
+           - Describe actual observed actions in Vietnamese in 'action_description'.
+           - Assess 'risk_score' (0-100), 'risk_level' ("LOW", "MEDIUM", "CRITICAL"), and 'is_danger' (boolean).
 
-            REQUIRED JSON SCHEMA (Return STRICT valid JSON only):
+        REQUIRED JSON FORMAT:
+        {{
+          "scene_summary": "Tóm tắt bối cảnh thực tế chính xác của video bằng tiếng Việt",
+          "total_subjects": 1,
+          "subjects": [
             {{
-              "total_subjects_detected": 4,
-              "scene_summary": "Khung cảnh giao thông quan sát thấy nhiều phương tiện và người đi bộ.",
-              "subjects": [
+              "target_id": "Target_01",
+              "class": "Person",
+              "bounding_box_normalized": [0.15, 0.25, 0.85, 0.50],
+              "time_intervals": [
                 {{
-                  "target_id": "Target_01",
-                  "class": "Person",
-                  "bounding_box_normalized": [180, 160, 720, 360],
-                  "time_intervals": [
-                    {{
-                      "start_time": 0.0,
-                      "end_time": 14.0,
-                      "action_description": "Đi bộ đều bước trên vỉa hè, di chuyển an toàn",
-                      "risk_score": 10,
-                      "risk_level": "LOW",
-                      "is_danger": false
-                    }}
-                  ]
-                }},
-                {{
-                  "target_id": "Target_02",
-                  "class": "Motorbike",
-                  "bounding_box_normalized": [240, 420, 640, 640],
-                  "time_intervals": [
-                    {{
-                      "start_time": 2.0,
-                      "end_time": 16.0,
-                      "action_description": "Di chuyển tốc độ cao, lạng lách qua các phương tiện khác",
-                      "risk_score": 85,
-                      "risk_level": "CRITICAL",
-                      "is_danger": true
-                    }}
-                  ]
+                  "start_time": 0.0,
+                  "end_time": {round(duration_sec, 1)},
+                  "action_description": "Mô tả chi tiết hành vi thực tế quan sát được",
+                  "risk_score": 10,
+                  "risk_level": "LOW",
+                  "is_danger": false,
+                  "danger_summary": ""
                 }}
               ]
             }}
-            """
+          ]
+        }}
+        """
 
-            response = genai_client.models.generate_content(
-                model=MODEL_NAME,
-                contents=[uploaded_file, prompt],
-                config={"response_mime_type": "application/json", "temperature": 0.15}
+        # Priority list of models to execute the real Gemini API call
+        model_candidates = [
+            MODEL_NAME,
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-3.7-flash",
+            "gemini-3.8-flash"
+        ]
+        seen_models = set()
+        models_to_try = [m for m in model_candidates if m and not (m in seen_models or seen_models.add(m))]
+
+        response = None
+        last_error = None
+        model_used = None
+
+        for model_id in models_to_try:
+            try:
+                print(f"[MODULE 1] Calling Gemini API with model '{model_id}'...")
+                response = genai_client.models.generate_content(
+                    model=model_id,
+                    contents=[uploaded_file, prompt],
+                    config={"response_mime_type": "application/json", "temperature": 0.1}
+                )
+                model_used = model_id
+                print(f"[MODULE 1] Gemini API call succeeded with model '{model_id}'.")
+                break
+            except Exception as ex:
+                last_error = ex
+                print(f"[MODULE 1 WARNING] Gemini model '{model_id}' failed: {ex}")
+
+        if not response or not response.text:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Missing API Key or Gemini Connection Failed",
+                    "detail": f"Gemini API call failed: {last_error}"
+                }
             )
 
-            parsed = json.loads(response.text)
-            scene_summary = parsed.get("scene_summary", "Khung cảnh giám sát đã được phân tích bởi Gemini AI.")
-            subjects_data = parsed.get("subjects", [])
-            subjects_list: List[SubjectTrack] = []
+        parsed = json.loads(response.text)
+        scene_summary = parsed.get("scene_summary") or "Khung cảnh giám sát đã được phân tích bởi Gemini AI."
+        subjects_data = parsed.get("subjects") or []
+        subjects_list: List[SubjectTrack] = []
+        events_list: List[VideoActionEvent] = []
 
-            if isinstance(subjects_data, list):
-                for subj in subjects_data:
-                    t_id = subj.get("target_id") or f"Target_{len(subjects_list)+1:02d}"
-                    s_class = subj.get("class") or "Person"
-                    raw_bbox = subj.get("bounding_box_normalized") or [180, 180, 700, 450]
-                    # Clamp bounding box coordinates to 0-1000
-                    bbox = [max(0, min(1000, int(c))) for c in raw_bbox]
-                    if len(bbox) != 4:
-                        bbox = [180, 180, 700, 450]
+        if isinstance(subjects_data, list) and subjects_data:
+            for subj in subjects_data:
+                t_id = subj.get("target_id") or f"Target_{len(subjects_list)+1:02d}"
+                s_class = subj.get("class") or "Person"
+                raw_bbox = subj.get("bounding_box_normalized") or [0.15, 0.20, 0.75, 0.45]
 
-                    t_intervals: List[TimeInterval] = []
-                    raw_intervals = subj.get("time_intervals", [])
-                    for interval in raw_intervals:
-                        st = max(0.0, float(interval.get("start_time", 0.0)))
-                        et = min(duration_sec, float(interval.get("end_time", duration_sec)))
-                        if et <= st:
-                            et = min(duration_sec, st + 2.0)
-                        time_display = f"{int(st//60):02d}:{int(st%60):02d} - {int(et//60):02d}:{int(et%60):02d}"
-                        act_desc = interval.get("action_description") or interval.get("action") or "Hoạt động ghi nhận trong video"
-                        r_score = int(interval.get("risk_score", 20))
-                        r_lvl = interval.get("risk_level", "LOW")
-                        if r_lvl in ["NORMAL", "LOW", "Safe"]:
-                            r_lvl = "LOW"
-                        elif r_lvl in ["WARNING", "MEDIUM", "MODERATE"]:
-                            r_lvl = "MEDIUM"
-                        else:
-                            r_lvl = "CRITICAL"
+                # Clamp bounding box coordinates strictly to float 0.0 - 1.0
+                bbox = []
+                for c in raw_bbox:
+                    try:
+                        val = float(c)
+                        if val > 1.0:  # in case model returned 0-1000 integer scale
+                            val = val / 1000.0
+                        bbox.append(round(max(0.0, min(1.0, val)), 4))
+                    except Exception:
+                        bbox.append(0.2)
+                if len(bbox) != 4:
+                    bbox = [0.15, 0.20, 0.75, 0.45]
 
-                        is_d = bool(interval.get("is_danger", r_score >= 70))
-                        d_sum = interval.get("danger_summary") or interval.get("danger_notes") or ("Cảnh báo nguy cơ cao" if is_d else "")
+                t_intervals: List[TimeInterval] = []
+                raw_intervals = subj.get("time_intervals") or []
+                for interval in raw_intervals:
+                    st = max(0.0, float(interval.get("start_time", 0.0)))
+                    et = min(duration_sec, float(interval.get("end_time", duration_sec)))
+                    if et <= st:
+                        et = min(duration_sec, st + 2.0)
+                    time_display = f"{int(st//60):02d}:{int(st%60):02d} - {int(et//60):02d}:{int(et%60):02d}"
+                    act_desc = interval.get("action_description") or interval.get("action") or "Hành vi quan sát được"
+                    r_score = int(interval.get("risk_score", 15))
+                    r_lvl = interval.get("risk_level", "LOW")
+                    if r_lvl in ["NORMAL", "LOW", "Safe"]:
+                        r_lvl = "LOW"
+                    elif r_lvl in ["WARNING", "MEDIUM", "MODERATE"]:
+                        r_lvl = "MEDIUM"
+                    else:
+                        r_lvl = "CRITICAL"
 
-                        t_intervals.append(TimeInterval(
-                            start_time=st,
-                            end_time=et,
-                            time_label=time_display,
-                            action_description=act_desc,
-                            risk_score=r_score,
-                            risk_level=r_lvl,
-                            is_danger=is_d,
-                            danger_summary=d_sum
-                        ))
+                    is_d = bool(interval.get("is_danger", r_score >= 70))
+                    d_sum = interval.get("danger_summary") or interval.get("danger_notes") or ("Cảnh báo nguy cơ cao" if is_d else "")
 
-                        # Also append to flattened events_list for compatibility
-                        evt_id = f"evt_{len(events_list)+1}"
-                        events_list.append(VideoActionEvent(
-                            id=evt_id,
-                            event_id=evt_id,
-                            character_id=t_id,
-                            target_id=t_id,
-                            subject_class=s_class,
-                            start_time=st,
-                            end_time=et,
-                            time_label=time_display,
-                            timestamp_display=time_display,
-                            action=act_desc,
-                            action_description=act_desc,
-                            risk_score=r_score,
-                            risk_level="CRITICAL" if is_d or r_lvl == "CRITICAL" else ("WARNING" if r_lvl == "MEDIUM" else "NORMAL"),
-                            is_danger=is_d,
-                            danger_summary=d_sum,
-                            danger_notes=d_sum,
-                            bounding_box_normalized=bbox
-                        ))
-
-                    subjects_list.append(SubjectTrack(
-                        target_id=t_id,
-                        subject_class=s_class,
-                        bounding_box_normalized=bbox,
-                        time_intervals=t_intervals
+                    t_intervals.append(TimeInterval(
+                        start_time=st,
+                        end_time=et,
+                        time_label=time_display,
+                        action_description=act_desc,
+                        risk_score=r_score,
+                        risk_level=r_lvl,
+                        is_danger=is_d,
+                        danger_summary=d_sum
                     ))
 
-            distinct_chars = [s.target_id for s in subjects_list]
-            total_subjects = parsed.get("total_subjects_detected", len(subjects_list))
+                    evt_id = f"evt_{len(events_list)+1}"
+                    events_list.append(VideoActionEvent(
+                        id=evt_id,
+                        event_id=evt_id,
+                        character_id=t_id,
+                        target_id=t_id,
+                        subject_class=s_class,
+                        start_time=st,
+                        end_time=et,
+                        time_label=time_display,
+                        timestamp_display=time_display,
+                        action=act_desc,
+                        action_description=act_desc,
+                        risk_score=r_score,
+                        risk_level="CRITICAL" if is_d or r_lvl == "CRITICAL" else ("WARNING" if r_lvl == "MEDIUM" else "NORMAL"),
+                        is_danger=is_d,
+                        danger_summary=d_sum,
+                        danger_notes=d_sum,
+                        bounding_box_normalized=bbox
+                    ))
 
-            print(f"[MODULE 1] Gemini {MODEL_NAME} successfully processed {len(subjects_list)} dense subjects and {len(events_list)} dynamic intervals.")
-        except Exception as e:
-            print(f"[MODULE 1 ERROR] Gemini File API error: {e}. Generating dense multi-subject duration-tailored data.")
-
-    # Branch B: Contextual Dense Multi-Subject Simulation Tailored to exact video duration
-    if not events_list:
-        d = max(duration_sec, 8.0)
-        t1 = round(d * 0.28, 1)
-        t2 = round(d * 0.65, 1)
-        t3 = round(d, 1)
-
-        scene_summary = "Khung cảnh giám sát đa đối tượng: Nhiều phương tiện giao thông và người đi bộ di chuyển trong khu vực kiểm soát."
-
-        subjects_list = [
-            SubjectTrack(
-                target_id="Target_01",
-                subject_class="Person",
-                bounding_box_normalized=[160, 160, 680, 360],
-                time_intervals=[
-                    TimeInterval(
-                        start_time=0.0,
-                        end_time=t2,
-                        time_label=f"00:00 - {int(t2//60):02d}:{int(t2%60):02d}",
-                        action_description="Chủ thể đi bộ đều bước trên vỉa hè an toàn, tầm nhìn hướng thẳng về phía trước",
-                        risk_score=12,
-                        risk_level="LOW",
-                        is_danger=False,
-                        danger_summary=""
-                    )
-                ]
-            ),
-            SubjectTrack(
-                target_id="Target_02",
-                subject_class="Motorbike",
-                bounding_box_normalized=[220, 380, 640, 580],
-                time_intervals=[
-                    TimeInterval(
-                        start_time=round(t1 * 0.5, 1),
-                        end_time=t3,
-                        time_label=f"{int((t1*0.5)//60):02d}:{int((t1*0.5)%60):02d} - {int(t3//60):02d}:{int(t3%60):02d}",
-                        action_description="Phương tiện lưu thông cùng chiều, duy trì cự ly an toàn chuẩn quy chuẩn giao thông",
-                        risk_score=24,
-                        risk_level="LOW",
-                        is_danger=False,
-                        danger_summary=""
-                    )
-                ]
-            ),
-            SubjectTrack(
-                target_id="Target_03",
-                subject_class="Pedestrian",
-                bounding_box_normalized=[140, 660, 560, 840],
-                time_intervals=[
-                    TimeInterval(
-                        start_time=0.0,
-                        end_time=t1,
-                        time_label=f"00:00 - {int(t1//60):02d}:{int(t1%60):02d}",
-                        action_description="Người đi bộ sát lề an toàn, chú ý quan sát đèn tín hiệu giao thông",
-                        risk_score=15,
-                        risk_level="LOW",
-                        is_danger=False,
-                        danger_summary=""
-                    ),
-                    TimeInterval(
-                        start_time=round(t2, 1),
-                        end_time=t3,
-                        time_label=f"{int(t2//60):02d}:{int(t2%60):02d} - {int(t3//60):02d}:{int(t3%60):02d}",
-                        action_description="Dừng chân tạm thời tại điểm chờ vạch qua đường chuẩn bị tiếp tục di chuyển",
-                        risk_score=18,
-                        risk_level="LOW",
-                        is_danger=False,
-                        danger_summary=""
-                    )
-                ]
-            ),
-            SubjectTrack(
-                target_id="Target_04",
-                subject_class="Vehicle",
-                bounding_box_normalized=[300, 60, 720, 320],
-                time_intervals=[
-                    TimeInterval(
-                        start_time=round(t1, 1),
-                        end_time=t2,
-                        time_label=f"{int(t1//60):02d}:{int(t1%60):02d} - {int(t2//60):02d}:{int(t2%60):02d}",
-                        action_description="Ô tô con giảm tốc độ nhường đường cho các phương tiện chuyển làn",
-                        risk_score=20,
-                        risk_level="LOW",
-                        is_danger=False,
-                        danger_summary=""
-                    )
-                ]
-            )
-        ]
-
-        # Flatten simulated subjects into events_list
-        events_list = []
-        for s in subjects_list:
-            for iv in s.time_intervals:
-                eid = f"evt_{len(events_list)+1}"
-                events_list.append(VideoActionEvent(
-                    id=eid,
-                    event_id=eid,
-                    character_id=s.target_id,
-                    target_id=s.target_id,
-                    subject_class=s.subject_class,
-                    start_time=iv.start_time,
-                    end_time=iv.end_time,
-                    time_label=iv.time_label,
-                    timestamp_display=iv.time_label or "",
-                    action=iv.action_description,
-                    action_description=iv.action_description,
-                    risk_score=iv.risk_score,
-                    risk_level="NORMAL",
-                    is_danger=iv.is_danger,
-                    danger_summary=iv.danger_summary,
-                    danger_notes=iv.danger_summary,
-                    bounding_box_normalized=s.bounding_box_normalized
+                subjects_list.append(SubjectTrack(
+                    target_id=t_id,
+                    subject_class=s_class,
+                    bounding_box_normalized=bbox,
+                    time_intervals=t_intervals
                 ))
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Missing API Key or Gemini Connection Failed",
+                    "detail": "Gemini returned empty subjects list. Mock data fallback is disabled."
+                }
+            )
 
         distinct_chars = [s.target_id for s in subjects_list]
-        total_subjects = len(subjects_list)
+        total_subjects = parsed.get("total_subjects") or parsed.get("total_subjects_detected") or len(subjects_list)
 
-    if not distinct_chars:
-        distinct_chars = list(dict.fromkeys([e.character_id or e.target_id for e in events_list if (e.character_id or e.target_id)]))
+        return VideoAnalysisResult(
+            total_subjects_detected=total_subjects,
+            scene_summary=scene_summary,
+            subjects=subjects_list,
+            characters_detected=distinct_chars,
+            characters=distinct_chars,
+            events=events_list,
+            video_url=video_url,
+            filename=file.filename,
+            duration=duration_sec,
+            ai_model_used=model_used or MODEL_NAME
+        )
 
-    return VideoAnalysisResult(
-        total_subjects_detected=total_subjects if 'total_subjects' in locals() else len(distinct_chars),
-        scene_summary=scene_summary,
-        subjects=subjects_list if 'subjects_list' in locals() else [],
-        characters_detected=distinct_chars,
-        characters=distinct_chars,
-        events=events_list,
-        video_url=video_url,
-        filename=file.filename,
-        duration=duration_sec,
-        ai_model_used=model_used
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[MODULE 1 CRITICAL ERROR] Gemini processing failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Missing API Key or Gemini Connection Failed",
+                "detail": str(e)
+            }
+        )
 
 
 @app.post("/api/analyze-live")

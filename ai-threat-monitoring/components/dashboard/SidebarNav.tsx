@@ -31,7 +31,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   isCollapsed,
   onToggleCollapse,
   criticalCount = 2,
-  activeModel = 'gemini-2.5-flash'
+  activeModel = 'gemini-3.8-flash'
 }) => {
   const pathname = usePathname();
 
@@ -53,15 +53,15 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     },
     {
-      name: 'AI Copilot & Chatbot',
+      name: 'AI Copilot & Trợ Lý An Ninh',
       shortName: 'Copilot',
       href: '/dashboard/ai-copilot',
       icon: Bot,
-      badge: 'Gemini 2.5',
+      badge: 'Gemini 3.8',
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     },
     {
-      name: 'Nhật Ký Cảnh Báo Admin',
+      name: 'Nhật Ký & Cảnh Báo Admin',
       shortName: 'Cảnh Báo',
       href: '/dashboard/nhat-ky-canh-bao',
       icon: AlertTriangle,
@@ -73,7 +73,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   return (
     <aside 
       className={`fixed left-0 top-0 h-screen bg-white border-r border-[#E2E8F0] z-40 flex flex-col transition-all duration-300 select-none ${
-        isCollapsed ? 'w-18' : 'w-64'
+        isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
       {/* Brand Header */}

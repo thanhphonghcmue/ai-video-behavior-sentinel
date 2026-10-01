@@ -17,7 +17,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isSirenActive, setIsSirenActive] = useState<boolean>(false);
-  const [activeModel, setActiveModel] = useState<string>('gemini-2.5-flash');
+  const [activeModel, setActiveModel] = useState<string>('gemini-3.8-flash');
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
@@ -43,7 +43,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         {/* Main Content Pane */}
         <main 
           className={`flex-1 p-5 overflow-y-auto transition-all duration-300 ${
-            isSidebarCollapsed ? 'ml-18' : 'ml-64'
+            isSidebarCollapsed ? 'ml-20' : 'ml-64'
           }`}
         >
           {children}

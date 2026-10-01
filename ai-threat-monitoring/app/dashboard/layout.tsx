@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 
 export default function DashboardLayout({
   children,
@@ -8,8 +9,8 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="h-screen w-screen bg-[#F9FAFB] text-[#111827] flex flex-col overflow-hidden font-sans">
+    <DashboardShell>
       {children}
-    </div>
+    </DashboardShell>
   );
 }

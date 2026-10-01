@@ -40,7 +40,7 @@ export interface SubjectTrack {
   target_id: string;
   subject_class?: string;
   class?: string;
-  bounding_box_normalized: number[]; // [ymin, xmin, ymax, xmax] 0-1000
+  bounding_box_normalized: number[]; // [ymin, xmin, ymax, xmax] 0.0 - 1.0
   time_intervals: TimeInterval[];
 }
 
@@ -48,7 +48,7 @@ export interface VideoActionEvent {
   id: string;
   event_id?: string;
   character_id: string;
-  target_id: string;
+  target_id?: string;
   subject_class?: string;
   start_time: number;
   end_time: number;
@@ -57,10 +57,10 @@ export interface VideoActionEvent {
   action: string;
   action_description?: string;
   risk_score: number;
-  risk_level: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'LOW' | 'MEDIUM' | 'HIGH';
-  is_danger: boolean;
-  danger_notes?: string;
+  risk_level: string;
+  is_danger?: boolean;
   danger_summary?: string;
+  danger_notes?: string;
   bounding_box_normalized?: number[];
 }
 
@@ -71,8 +71,16 @@ interface ChatMessage {
   time: string;
 }
 
-export default function VideoAnalysisDashboardPage() {
+interface VideoRenderBounds {
+  renderedWidth: number;
+  renderedHeight: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+export default function VideoAnalysisDashboard() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
@@ -80,201 +88,138 @@ export default function VideoAnalysisDashboardPage() {
   // Playback States
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(28.0);
+  const [duration, setDuration] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(true);
 
   // Video Source & Upload
   const [videoSourceUrl, setVideoSourceUrl] = useState<string>('');
-  const [uploadedFileName, setUploadedFileName] = useState<string>('sample_surveillance.mp4');
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [aiModelUsed, setAiModelUsed] = useState<string>('Gemini 2.5 Flash');
-  const [sceneSummary, setSceneSummary] = useState<string>(
-    'Khung cảnh giám sát đa đối tượng: Nhiều phương tiện giao thông và người đi bộ di chuyển trong khu vực an ninh.'
-  );
+  const [aiModelUsed, setAiModelUsed] = useState<string>('Gemini AI Studio');
+  const [sceneSummary, setSceneSummary] = useState<string>('');
 
-  // Multi-Subject & Event States
-  const [subjects, setSubjects] = useState<SubjectTrack[]>([
-    {
-      target_id: 'Target_01',
-      subject_class: 'Person',
-      bounding_box_normalized: [160, 160, 680, 360],
-      time_intervals: [
-        {
-          start_time: 0.0,
-          end_time: 14.0,
-          time_label: '00:00 - 00:14',
-          action_description: 'Đi bộ đều bước trên vỉa hè, di chuyển an toàn',
-          risk_score: 10,
-          risk_level: 'LOW',
-          is_danger: false,
-        }
-      ]
-    },
-    {
-      target_id: 'Target_02',
-      subject_class: 'Motorbike',
-      bounding_box_normalized: [220, 380, 640, 580],
-      time_intervals: [
-        {
-          start_time: 2.0,
-          end_time: 16.0,
-          time_label: '00:02 - 00:16',
-          action_description: 'Di chuyển tốc độ cao, lạng lách qua các phương tiện khác',
-          risk_score: 85,
-          risk_level: 'CRITICAL',
-          is_danger: true,
-        }
-      ]
-    },
-    {
-      target_id: 'Target_03',
-      subject_class: 'Pedestrian',
-      bounding_box_normalized: [140, 660, 560, 840],
-      time_intervals: [
-        {
-          start_time: 0.0,
-          end_time: 10.0,
-          time_label: '00:00 - 00:10',
-          action_description: 'Người đi bộ sát lề an toàn, chú ý quan sát đèn tín hiệu',
-          risk_score: 15,
-          risk_level: 'LOW',
-          is_danger: false,
-        },
-        {
-          start_time: 18.0,
-          end_time: 28.0,
-          time_label: '00:18 - 00:28',
-          action_description: 'Dừng chân tạm thời tại điểm chờ vạch qua đường',
-          risk_score: 18,
-          risk_level: 'LOW',
-          is_danger: false,
-        }
-      ]
-    },
-    {
-      target_id: 'Target_04',
-      subject_class: 'Vehicle',
-      bounding_box_normalized: [300, 60, 720, 320],
-      time_intervals: [
-        {
-          start_time: 8.0,
-          end_time: 22.0,
-          time_label: '00:08 - 00:22',
-          action_description: 'Ô tô con giảm tốc độ nhường đường an toàn',
-          risk_score: 20,
-          risk_level: 'LOW',
-          is_danger: false,
-        }
-      ]
-    }
-  ]);
+  // Multi-Subject & Event States (Clean initialization: NO MOCK DATA)
+  const [subjects, setSubjects] = useState<SubjectTrack[]>([]);
+  const [events, setEvents] = useState<VideoActionEvent[]>([]);
 
-  const [events, setEvents] = useState<VideoActionEvent[]>([
-    {
-      id: 'evt_1',
-      character_id: 'Target_01',
-      target_id: 'Target_01',
-      subject_class: 'Person',
-      start_time: 0.0,
-      end_time: 14.0,
-      time_label: '00:00 - 00:14',
-      action: 'Đi bộ đều bước trên vỉa hè, di chuyển an toàn',
-      action_description: 'Đi bộ đều bước trên vỉa hè, di chuyển an toàn',
-      risk_score: 10,
-      risk_level: 'NORMAL',
-      is_danger: false,
-      bounding_box_normalized: [160, 160, 680, 360]
-    },
-    {
-      id: 'evt_2',
-      character_id: 'Target_02',
-      target_id: 'Target_02',
-      subject_class: 'Motorbike',
-      start_time: 2.0,
-      end_time: 16.0,
-      time_label: '00:02 - 00:16',
-      action: 'Di chuyển tốc độ cao, lạng lách qua các phương tiện khác',
-      action_description: 'Di chuyển tốc độ cao, lạng lách qua các phương tiện khác',
-      risk_score: 85,
-      risk_level: 'CRITICAL',
-      is_danger: true,
-      bounding_box_normalized: [220, 380, 640, 580]
-    },
-    {
-      id: 'evt_3',
-      character_id: 'Target_03',
-      target_id: 'Target_03',
-      subject_class: 'Pedestrian',
-      start_time: 0.0,
-      end_time: 10.0,
-      time_label: '00:00 - 00:10',
-      action: 'Người đi bộ sát lề an toàn, chú ý quan sát đèn tín hiệu',
-      action_description: 'Người đi bộ sát lề an toàn, chú ý quan sát đèn tín hiệu',
-      risk_score: 15,
-      risk_level: 'NORMAL',
-      is_danger: false,
-      bounding_box_normalized: [140, 660, 560, 840]
-    },
-    {
-      id: 'evt_4',
-      character_id: 'Target_04',
-      target_id: 'Target_04',
-      subject_class: 'Vehicle',
-      start_time: 8.0,
-      end_time: 22.0,
-      time_label: '00:08 - 00:22',
-      action: 'Ô tô con giảm tốc độ nhường đường an toàn',
-      action_description: 'Ô tô con giảm tốc độ nhường đường an toàn',
-      risk_score: 20,
-      risk_level: 'NORMAL',
-      is_danger: false,
-      bounding_box_normalized: [300, 60, 720, 320]
-    },
-    {
-      id: 'evt_5',
-      character_id: 'Target_03',
-      target_id: 'Target_03',
-      subject_class: 'Pedestrian',
-      start_time: 18.0,
-      end_time: 28.0,
-      time_label: '00:18 - 00:28',
-      action: 'Dừng chân tạm thời tại điểm chờ vạch qua đường',
-      action_description: 'Dừng chân tạm thời tại điểm chờ vạch qua đường',
-      risk_score: 18,
-      risk_level: 'NORMAL',
-      is_danger: false,
-      bounding_box_normalized: [140, 660, 560, 840]
-    }
-  ]);
-
-  // Filters & Active Selection
+  // Selection & Filter States
+  const [activeEventId, setActiveEventId] = useState<string>('');
+  const [activeTargetId, setActiveTargetId] = useState<string>('');
   const [selectedTarget, setSelectedTarget] = useState<string>('ALL');
   const [dangerOnly, setDangerOnly] = useState<boolean>(false);
-  const [activeEventId, setActiveEventId] = useState<string>('evt_1');
-  const [activeTargetId, setActiveTargetId] = useState<string>('Target_01');
 
-  // Copilot mini chat
+  // AI Copilot Chat Messages
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
-      id: 'msg_1',
+      id: 'msg_welcome',
       role: 'assistant',
-      text: 'Xin chào! Tôi là AI Copilot an ninh. Video đã được phân tích đa đối tượng với bounding box chuẩn hóa. Bạn có thể bấm vào từng nhân vật hoặc dòng thời gian để định vị nhanh.',
-      time: 'Vừa xong'
+      text: 'Hệ thống SENTINEL AI sẵn sàng tiếp nhận video giám sát. Tải lên tệp video MP4/WebM để Gemini phân tích đối tượng và ranh giới hành vi thời gian thực.',
+      time: 'Hệ thống'
     }
   ]);
   const [chatInput, setChatInput] = useState<string>('');
   const [isCopilotThinking, setIsCopilotThinking] = useState<boolean>(false);
 
-  // Synchronize Playback Time & Auto Highlight Active Event Card
+  // =========================================================================
+  // FIX 2: EXACT LETTERBOXING / PILLARBOXING MATHEMATICS
+  // =========================================================================
+  const [videoBounds, setVideoBounds] = useState<VideoRenderBounds>({
+    renderedWidth: 0,
+    renderedHeight: 0,
+    offsetX: 0,
+    offsetY: 0,
+  });
+
+  const calculateVideoBounds = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const clientWidth = video.clientWidth;
+    const clientHeight = video.clientHeight;
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+
+    if (!clientWidth || !clientHeight) return;
+
+    if (!videoWidth || !videoHeight) {
+      setVideoBounds({
+        renderedWidth: clientWidth,
+        renderedHeight: clientHeight,
+        offsetX: 0,
+        offsetY: 0,
+      });
+      return;
+    }
+
+    const videoRatio = videoWidth / videoHeight;
+    const containerRatio = clientWidth / clientHeight;
+
+    let renderedWidth = clientWidth;
+    let renderedHeight = clientHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > videoRatio) {
+      // PILLARBOXED: Container is wider than the video.
+      // Video fills full vertical height; black margins exist on left & right.
+      renderedHeight = clientHeight;
+      renderedWidth = clientHeight * videoRatio;
+      offsetX = (clientWidth - renderedWidth) / 2;
+      offsetY = 0;
+    } else {
+      // LETTERBOXED: Container is taller than the video.
+      // Video fills full horizontal width; black margins exist on top & bottom.
+      renderedWidth = clientWidth;
+      renderedHeight = clientWidth / videoRatio;
+      offsetX = 0;
+      offsetY = (clientHeight - renderedHeight) / 2;
+    }
+
+    setVideoBounds({
+      renderedWidth: Math.round(renderedWidth),
+      renderedHeight: Math.round(renderedHeight),
+      offsetX: Math.round(offsetX),
+      offsetY: Math.round(offsetY),
+    });
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    calculateVideoBounds();
+
+    const ro = new ResizeObserver(() => {
+      calculateVideoBounds();
+    });
+    ro.observe(video);
+
+    const onMetadata = () => {
+      calculateVideoBounds();
+    };
+
+    video.addEventListener('loadedmetadata', onMetadata);
+    window.addEventListener('resize', calculateVideoBounds);
+
+    return () => {
+      ro.disconnect();
+      video.removeEventListener('loadedmetadata', onMetadata);
+      window.removeEventListener('resize', calculateVideoBounds);
+    };
+  }, [calculateVideoBounds, videoSourceUrl]);
+
+  // Synchronize Active Timeline Event with Playhead
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
-    const cur = videoRef.current.currentTime;
-    setCurrentTime(cur);
+    const time = videoRef.current.currentTime;
+    setCurrentTime(time);
 
-    // Auto-detect active event
-    const activeEvt = events.find(e => cur >= e.start_time && cur <= e.end_time);
+    if (events.length === 0) return;
+
+    // Find active event matching current playback second
+    const activeEvt = events.find(e => time >= e.start_time && time <= e.end_time);
     if (activeEvt && activeEvt.id !== activeEventId) {
       setActiveEventId(activeEvt.id);
       setActiveTargetId(activeEvt.target_id || activeEvt.character_id);
@@ -291,6 +236,7 @@ export default function VideoAnalysisDashboardPage() {
     if (videoRef.current && videoRef.current.duration) {
       setDuration(videoRef.current.duration);
     }
+    calculateVideoBounds();
   };
 
   const togglePlay = () => {
@@ -311,7 +257,6 @@ export default function VideoAnalysisDashboardPage() {
     setActiveEventId(event.id);
     setActiveTargetId(event.target_id || event.character_id);
     
-    // Auto-play instantly
     videoRef.current.play()
       .then(() => setIsPlaying(true))
       .catch(() => {});
@@ -326,7 +271,7 @@ export default function VideoAnalysisDashboardPage() {
     }
   }, [events, jumpToEvent]);
 
-  // Robust Multi-Endpoint Video Upload
+  // Video Upload Handler - Calls Real Backend Gemini API
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -335,6 +280,12 @@ export default function VideoAnalysisDashboardPage() {
     setIsUploading(true);
     setUploadError(null);
     setUploadProgress('Đang tải video lên máy chủ AI...');
+
+    // Provide immediate local preview while awaiting AI response
+    try {
+      const localUrl = URL.createObjectURL(file);
+      setVideoSourceUrl(localUrl);
+    } catch (_) {}
 
     const formData = new FormData();
     formData.append('file', file);
@@ -350,7 +301,7 @@ export default function VideoAnalysisDashboardPage() {
 
     for (const url of endpoints) {
       try {
-        setUploadProgress(`Đang kết nối qua ${url}...`);
+        setUploadProgress(`Đang gửi tới Google Gemini AI qua ${url}...`);
         const res = await fetch(url, {
           method: 'POST',
           body: formData,
@@ -386,13 +337,23 @@ export default function VideoAnalysisDashboardPage() {
             {
               id: `msg_${Date.now()}`,
               role: 'assistant',
-              text: `Đã phân tích video "${file.name}" thành công bằng ${data.ai_model_used}. Nhận diện ${data.total_subjects_detected || data.subjects?.length || 0} đối tượng với ${data.events?.length || 0} mốc hành vi động.`,
+              text: `Đã phân tích video "${file.name}" thành công bằng ${data.ai_model_used}. Nhận diện ${data.total_subjects_detected || data.subjects?.length || 0} đối tượng với ${data.events?.length || 0} mốc hành vi thực tế.`,
               time: 'Vừa xong'
             }
           ]);
           break;
         } else {
-          lastErrorMsg = `Máy chủ phản hồi mã lỗi ${res.status}`;
+          try {
+            const errJson = await res.json();
+            const detail = errJson.detail;
+            if (typeof detail === 'object' && detail !== null) {
+              lastErrorMsg = detail.detail || detail.error || JSON.stringify(detail);
+            } else {
+              lastErrorMsg = String(detail || `Máy chủ phản hồi mã lỗi ${res.status}`);
+            }
+          } catch (_) {
+            lastErrorMsg = `Máy chủ phản hồi mã lỗi ${res.status}`;
+          }
         }
       } catch (err: any) {
         lastErrorMsg = err?.message || 'Lỗi kết nối mạng';
@@ -400,7 +361,7 @@ export default function VideoAnalysisDashboardPage() {
     }
 
     if (!success) {
-      setUploadError(`Không thể kết nối đến backend trên cổng 8000 (${lastErrorMsg}). Hãy đảm bảo server.py đang chạy.`);
+      setUploadError(`Lỗi xử lý video: ${lastErrorMsg}. Vui lòng kiểm tra cổng 8000 và kết nối Gemini API.`);
     }
 
     setIsUploading(false);
@@ -460,7 +421,7 @@ export default function VideoAnalysisDashboardPage() {
         {
           id: `bot_${Date.now()}`,
           role: 'assistant',
-          text: `AI Copilot ghi nhận: ${query}. Hệ thống đang giám sát các đối tượng ${distinctTargetIds.join(', ')} trong video.`,
+          text: 'Không thể kết nối đến máy chủ AI Copilot. Vui lòng kiểm tra lại backend.',
           time: 'Vừa xong'
         }
       ]);
@@ -469,7 +430,7 @@ export default function VideoAnalysisDashboardPage() {
   };
 
   // Distinct targets for filter
-  const distinctTargetIds = Array.from(new Set(events.map(e => e.target_id || e.character_id)));
+  const distinctTargetIds = Array.from(new Set(events.map(e => e.target_id || e.character_id).filter(Boolean)));
 
   // Filtered Events
   const filteredEvents = events.filter(e => {
@@ -479,7 +440,7 @@ export default function VideoAnalysisDashboardPage() {
     return true;
   });
 
-  const currentActiveEvent = events.find(e => e.id === activeEventId) || events[0];
+  const currentActiveEvent = events.find(e => e.id === activeEventId);
   const isCurrentDangerous = (currentActiveEvent?.risk_score ?? 0) >= 70;
 
   return (
@@ -500,7 +461,7 @@ export default function VideoAnalysisDashboardPage() {
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              Nhận diện ranh giới hành vi tự nhiên (Dynamic Timestamps) & Bounding Box chuẩn hóa 0-1000 cho mọi nhân vật
+              Nhận diện ranh giới hành vi tự nhiên (Dynamic Timestamps) & Bounding Box chuẩn xác theo từng pixel hiển thị
             </p>
           </div>
         </div>
@@ -522,7 +483,7 @@ export default function VideoAnalysisDashboardPage() {
             {isUploading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>{uploadProgress || 'Đang xử lý chunked video...'}</span>
+                <span>{uploadProgress || 'Đang gửi tới Gemini AI...'}</span>
               </>
             ) : (
               <>
@@ -534,28 +495,28 @@ export default function VideoAnalysisDashboardPage() {
         </div>
       </div>
 
-      {/* Upload Error Banner if server is offline */}
+      {/* Upload Error Banner */}
       {uploadError && (
         <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 text-xs text-[#EA580C] flex items-center justify-between gap-3 animate-in fade-in duration-200">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>{uploadError}</span>
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-[#EA580C]" />
+            <span className="font-semibold">{uploadError}</span>
           </div>
-          <button
-            onClick={() => setUploadError(null)}
-            className="text-gray-400 hover:text-gray-600 font-bold px-2 py-1"
+          <button 
+            onClick={() => setUploadError(null)} 
+            className="text-gray-500 hover:text-gray-800 p-1"
           >
-            Đóng
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Scene Summary Banner from Gemini 2.5 Flash */}
+      {/* Scene Summary Banner from Real Gemini API */}
       {sceneSummary && (
         <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 to-slate-50 border border-blue-100 flex items-start gap-2.5 text-xs">
           <Sparkles className="w-4 h-4 text-brand-blue flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-bold text-[#0F172A] mr-1.5">Tóm Tắt Bối Cảnh Video (Gemini AI Vision):</span>
+            <span className="font-bold text-[#0F172A] mr-1.5">Tóm Tắt Bối Cảnh Thực Tế (Google Gemini):</span>
             <span className="text-gray-700 leading-relaxed">{sceneSummary}</span>
           </div>
         </div>
@@ -565,7 +526,7 @@ export default function VideoAnalysisDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
         {/* ========================================================================= */}
-        {/* LEFT COLUMN (60%): VIDEO PLAYER WITH CANVAS BOUNDING BOXES OVERLAY */}
+        {/* LEFT COLUMN (60%): VIDEO PLAYER WITH ACCURATE BOUNDING BOXES OVERLAY */}
         {/* ========================================================================= */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
@@ -573,7 +534,7 @@ export default function VideoAnalysisDashboardPage() {
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 font-bold text-[#0F172A]">
                 <Eye className="w-4 h-4 text-brand-blue" />
-                <span className="truncate max-w-[280px]">{uploadedFileName}</span>
+                <span className="truncate max-w-[280px]">{uploadedFileName || 'Khung nhìn video giám sát'}</span>
               </div>
               <div className="flex items-center gap-3 text-gray-500 font-mono text-[11px]">
                 <span>
@@ -583,150 +544,179 @@ export default function VideoAnalysisDashboardPage() {
                   {Math.floor(duration % 60).toString().padStart(2, '0')}
                 </span>
                 <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-bold">
-                  {distinctTargetIds.length} Chủ thể
+                  {distinctTargetIds.length} Đối tượng
                 </span>
               </div>
             </div>
 
             {/* Video Player + Bounding Box Canvas Container */}
-            <div className="relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden group select-none">
-              <video
-                ref={videoRef}
-                src={videoSourceUrl || undefined}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                muted={isMuted}
-                playsInline
-                className="w-full h-full object-contain cursor-pointer"
-                onClick={togglePlay}
-              >
-                {/* Fallback sample if no url */}
-                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" type="video/mp4" />
-              </video>
-
-              {/* DYNAMIC BOUNDING BOX OVERLAYS FOR ALL DETECTED TARGETS */}
-              {/* Formula: top: ymin/10 %, left: xmin/10 %, height: (ymax-ymin)/10 %, width: (xmax-xmin)/10 % */}
-              {subjects.map((subj) => {
-                const bbox = subj.bounding_box_normalized || [150, 200, 750, 450];
-                const ymin = bbox[0] ?? 150;
-                const xmin = bbox[1] ?? 200;
-                const ymax = bbox[2] ?? 750;
-                const xmax = bbox[3] ?? 450;
-
-                const topPct = (ymin / 10).toFixed(1);
-                const leftPct = (xmin / 10).toFixed(1);
-                const heightPct = Math.max(8, ((ymax - ymin) / 10)).toFixed(1);
-                const widthPct = Math.max(8, ((xmax - xmin) / 10)).toFixed(1);
-
-                const isActive = (subj.target_id === activeTargetId);
-                const activeInterval = subj.time_intervals.find(
-                  iv => currentTime >= iv.start_time && currentTime <= iv.end_time
-                );
-                const isIntervalActive = Boolean(activeInterval);
-                const isDanger = (activeInterval?.risk_score ?? 0) >= 70;
-
-                return (
-                  <div
-                    key={subj.target_id}
-                    onClick={() => jumpToTarget(subj.target_id)}
-                    style={{
-                      top: `${topPct}%`,
-                      left: `${leftPct}%`,
-                      height: `${heightPct}%`,
-                      width: `${widthPct}%`,
-                    }}
-                    className={`absolute border-2 transition-all duration-200 cursor-pointer pointer-events-auto rounded-lg ${
-                      isDanger
-                        ? 'border-[#EA580C] bg-orange-500/15 shadow-lg shadow-orange-500/30 ring-2 ring-orange-400/50'
-                        : isActive
-                        ? 'border-[#2563EB] bg-blue-500/15 ring-2 ring-blue-400/50'
-                        : isIntervalActive
-                        ? 'border-emerald-400 bg-emerald-500/10'
-                        : 'border-white/40 hover:border-blue-300'
-                    }`}
-                  >
-                    {/* Bounding Box Label Badge */}
-                    <div className="absolute -top-7 left-0 whitespace-nowrap">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold shadow-md flex items-center gap-1 ${
-                        isDanger
-                          ? 'bg-[#EA580C] text-white'
-                          : isActive
-                          ? 'bg-[#2563EB] text-white'
-                          : 'bg-slate-900/90 text-white'
-                      }`}>
-                        <span>{subj.target_id}</span>
-                        <span className="text-[9px] opacity-75">({subj.subject_class || 'Person'})</span>
-                        {activeInterval && (
-                          <span className="font-mono text-[9px] bg-black/30 px-1 rounded">
-                            {activeInterval.risk_score}%
-                          </span>
-                        )}
-                      </span>
-                    </div>
-
-                    {/* Corner Reticle Accents */}
-                    <span className="absolute -top-1 -left-1 w-2 h-2 border-t-2 border-l-2 border-inherit"></span>
-                    <span className="absolute -top-1 -right-1 w-2 h-2 border-t-2 border-r-2 border-inherit"></span>
-                    <span className="absolute -bottom-1 -left-1 w-2 h-2 border-b-2 border-l-2 border-inherit"></span>
-                    <span className="absolute -bottom-1 -right-1 w-2 h-2 border-b-2 border-r-2 border-inherit"></span>
+            <div 
+              ref={containerRef}
+              className="relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden group select-none"
+            >
+              {videoSourceUrl ? (
+                <video
+                  ref={videoRef}
+                  src={videoSourceUrl}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  muted={isMuted}
+                  playsInline
+                  className="w-full h-full object-contain cursor-pointer"
+                  onClick={togglePlay}
+                />
+              ) : (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-3 cursor-pointer hover:bg-slate-900 transition-colors"
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center text-white">
+                    <UploadCloud className="w-7 h-7 text-blue-400" />
                   </div>
-                );
-              })}
+                  <div className="text-center space-y-1">
+                    <p className="text-xs font-bold text-gray-200">Bấm để tải lên video cần phân tích</p>
+                    <p className="text-[11px] text-gray-400">Hỗ trợ định dạng MP4, WebM (H.264/VP9)</p>
+                  </div>
+                </div>
+              )}
 
-              {/* Big Play Button Overlay on Hover/Paused */}
-              {!isPlaying && (
+              {/* DYNAMIC BOUNDING BOX OVERLAYS (EXACT PIXEL MAPPING IGNORING LETTERBOX MARGINS) */}
+              {videoSourceUrl && videoBounds.renderedWidth > 0 && (
+                subjects.map((subj) => {
+                  const norm = (v: number) => {
+                    if (v > 1.0) return v / 1000.0;
+                    return Math.max(0.0, Math.min(1.0, v));
+                  };
+
+                  const bbox = subj.bounding_box_normalized || [0.15, 0.20, 0.75, 0.45];
+                  const ymin = norm(bbox[0] ?? 0.15);
+                  const xmin = norm(bbox[1] ?? 0.20);
+                  const ymax = norm(bbox[2] ?? 0.75);
+                  const xmax = norm(bbox[3] ?? 0.45);
+
+                  // Exact formula taking letterbox/pillarbox offsets into account:
+                  const top = videoBounds.offsetY + (ymin * videoBounds.renderedHeight);
+                  const left = videoBounds.offsetX + (xmin * videoBounds.renderedWidth);
+                  const width = Math.max(28, (xmax - xmin) * videoBounds.renderedWidth);
+                  const height = Math.max(28, (ymax - ymin) * videoBounds.renderedHeight);
+
+                  const isActive = (subj.target_id === activeTargetId);
+                  const activeInterval = subj.time_intervals?.find(
+                    iv => currentTime >= iv.start_time && currentTime <= iv.end_time
+                  );
+                  const isIntervalActive = Boolean(activeInterval);
+                  const isDanger = (activeInterval?.risk_score ?? 0) >= 70;
+
+                  return (
+                    <div
+                      key={subj.target_id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        jumpToTarget(subj.target_id);
+                      }}
+                      style={{
+                        top: `${top}px`,
+                        left: `${left}px`,
+                        height: `${height}px`,
+                        width: `${width}px`,
+                      }}
+                      className={`absolute border-2 transition-all duration-150 cursor-pointer pointer-events-auto rounded-lg ${
+                        isDanger
+                          ? 'border-[#EA580C] bg-orange-500/15 shadow-lg shadow-orange-500/30 ring-2 ring-orange-400/50'
+                          : isActive
+                          ? 'border-[#2563EB] bg-blue-500/15 ring-2 ring-blue-400/50'
+                          : isIntervalActive
+                          ? 'border-emerald-400 bg-emerald-500/10'
+                          : 'border-white/50 hover:border-blue-300'
+                      }`}
+                    >
+                      {/* Bounding Box Label Badge */}
+                      <div className="absolute -top-7 left-0 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold shadow-md flex items-center gap-1 ${
+                          isDanger
+                            ? 'bg-[#EA580C] text-white'
+                            : isActive
+                            ? 'bg-[#2563EB] text-white'
+                            : 'bg-slate-900/90 text-white'
+                        }`}>
+                          <span>{subj.target_id}</span>
+                          <span className="text-[9px] opacity-75">({subj.subject_class || subj.class || 'Person'})</span>
+                          {activeInterval && (
+                            <span className="font-mono text-[9px] bg-black/30 px-1 rounded">
+                              {activeInterval.risk_score}%
+                            </span>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Reticle Corner Accents */}
+                      <span className="absolute -top-1 -left-1 w-2 h-2 border-t-2 border-l-2 border-inherit"></span>
+                      <span className="absolute -top-1 -right-1 w-2 h-2 border-t-2 border-r-2 border-inherit"></span>
+                      <span className="absolute -bottom-1 -left-1 w-2 h-2 border-b-2 border-l-2 border-inherit"></span>
+                      <span className="absolute -bottom-1 -right-1 w-2 h-2 border-b-2 border-r-2 border-inherit"></span>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Play Button Overlay when Paused */}
+              {videoSourceUrl && !isPlaying && (
                 <div 
                   onClick={togglePlay}
-                  className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
+                  className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer pointer-events-auto"
                 >
-                  <div className="w-16 h-16 rounded-full bg-blue-600/90 hover:bg-blue-600 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-110">
-                    <Play className="w-7 h-7 ml-1" />
+                  <div className="w-14 h-14 rounded-2xl bg-white/90 text-brand-blue flex items-center justify-center shadow-xl hover:scale-110 transition-transform">
+                    <Play className="w-7 h-7 fill-current ml-1" />
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Playback Controls & Timeline Slider */}
-            <div className="p-4 bg-white space-y-3">
-              {/* Scrubbing Bar */}
-              <div className="relative">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  step={0.1}
-                  value={currentTime}
-                  onChange={(e) => {
-                    const newTime = parseFloat(e.target.value);
-                    if (videoRef.current) videoRef.current.currentTime = newTime;
-                    setCurrentTime(newTime);
-                  }}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#2563EB]"
-                />
-              </div>
+            {/* Video Controls Bar */}
+            <div className="p-3 bg-white border-t border-gray-100 flex flex-col gap-2">
+              {/* Timeline Progress Slider */}
+              <input
+                type="range"
+                min="0"
+                max={duration || 100}
+                step="0.1"
+                value={currentTime}
+                onChange={(e) => {
+                  const t = parseFloat(e.target.value);
+                  setCurrentTime(t);
+                  if (videoRef.current) {
+                    videoRef.current.currentTime = t;
+                  }
+                }}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#2563EB]"
+              />
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              {/* Action Buttons & Target Quick Jump */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={togglePlay}
-                    className="w-9 h-9 rounded-xl bg-blue-50 hover:bg-blue-100 text-brand-blue flex items-center justify-center transition-colors"
+                    className="p-2 rounded-xl bg-blue-50 text-brand-blue hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
                   >
-                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+                    <span>{isPlaying ? 'Tạm dừng' : 'Phát'}</span>
                   </button>
                   <button
                     onClick={() => {
-                      if (videoRef.current) videoRef.current.currentTime = 0;
-                      setCurrentTime(0);
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = 0;
+                        setCurrentTime(0);
+                      }
                     }}
-                    className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors"
+                    className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
                     title="Phát lại từ đầu"
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setIsMuted(!isMuted)}
-                    className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors"
+                    className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors"
+                    title={isMuted ? 'Bật âm thanh' : 'Tắt âm'}
                   >
                     {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                   </button>
@@ -738,29 +728,33 @@ export default function VideoAnalysisDashboardPage() {
                   </span>
                 </div>
 
-                {/* Target jump badges */}
+                {/* Target Quick Jump Badges */}
                 <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
                   <span className="text-gray-400 font-semibold text-[11px]">Định vị:</span>
-                  {distinctTargetIds.map((tid) => (
-                    <button
-                      key={tid}
-                      onClick={() => jumpToTarget(tid)}
-                      className={`px-2 py-1 rounded-lg font-bold text-[11px] transition-all ${
-                        activeTargetId === tid
-                          ? 'bg-[#2563EB] text-white shadow-xs'
-                          : 'bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-brand-blue'
-                      }`}
-                    >
-                      {tid}
-                    </button>
-                  ))}
+                  {distinctTargetIds.length === 0 ? (
+                    <span className="text-gray-400 text-[11px] italic">Chưa có đối tượng</span>
+                  ) : (
+                    distinctTargetIds.map((tid) => (
+                      <button
+                        key={tid}
+                        onClick={() => jumpToTarget(tid)}
+                        className={`px-2 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                          activeTargetId === tid
+                            ? 'bg-[#2563EB] text-white shadow-xs'
+                            : 'bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-brand-blue'
+                        }`}
+                      >
+                        {tid}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* SOP Emergency Incident Recommendation Panel (if active event is risky) */}
-          {isCurrentDangerous && (
+          {/* Emergency Alert Panel if Current Action is High-Risk */}
+          {isCurrentDangerous && currentActiveEvent && (
             <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 text-xs text-[#EA580C] space-y-2 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 font-bold text-sm text-[#EA580C]">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0" />
@@ -771,10 +765,10 @@ export default function VideoAnalysisDashboardPage() {
               </p>
               <div className="flex gap-2 pt-1">
                 <button
-                  onClick={() => alert("Đã lưu clip bằng chứng và gửi thông báo khẩn cấp đến phòng an ninh.")}
+                  onClick={() => alert("Đã ghi nhận cảnh báo và lưu vết video bằng chứng an ninh.")}
                   className="px-3 py-1.5 rounded-xl bg-[#EA580C] hover:bg-orange-700 text-white font-bold transition-all shadow-xs"
                 >
-                  Lưu Bằng Chứng & Điều Đội Cơ Động
+                  Ghi Nhận & Điều Đội Cơ Động
                 </button>
               </div>
             </div>
@@ -847,8 +841,11 @@ export default function VideoAnalysisDashboardPage() {
             >
               {filteredEvents.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 p-6 space-y-2">
-                  <Filter className="w-8 h-8 text-gray-300" />
-                  <p className="text-xs font-semibold">Không có sự kiện nào phù hợp với bộ lọc</p>
+                  <Film className="w-9 h-9 text-gray-300 mb-1" />
+                  <p className="text-xs font-bold text-gray-700">Chưa có dữ liệu hành vi</p>
+                  <p className="text-[11px] text-gray-400 max-w-[260px] leading-relaxed">
+                    Hãy bấm &quot;Tải Lên Video Mới&quot; ở góc trên để Gemini AI phân tích các chủ thể và ranh giới hành vi thực tế.
+                  </p>
                 </div>
               ) : (
                 filteredEvents.map((evt) => {
@@ -892,23 +889,24 @@ export default function VideoAnalysisDashboardPage() {
                         </div>
                       </div>
 
-                      <p className="text-xs text-gray-700 leading-relaxed font-normal">
+                      <p className="text-xs text-gray-700 leading-snug">
                         {evt.action_description || evt.action}
                       </p>
 
-                      {/* Interactive seek prompt */}
-                      <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
-                        <span className="flex items-center gap-1 font-medium">
-                          {isActive ? (
-                            <span className="text-brand-blue font-bold flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
-                              Đang phát đoạn này
-                            </span>
-                          ) : (
-                            'Bấm để nhảy tới mốc thời gian'
-                          )}
+                      {evt.danger_summary && (
+                        <div className="mt-2 text-[11px] text-[#EA580C] font-semibold flex items-center gap-1.5 bg-orange-50/80 p-2 rounded-xl">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>{evt.danger_summary}</span>
+                        </div>
+                      )}
+
+                      <div className="mt-2.5 flex items-center justify-between text-[11px] text-gray-400 pt-1.5 border-t border-gray-100">
+                        <span className="font-mono text-[10px]">
+                          {evt.start_time.toFixed(1)}s → {evt.end_time.toFixed(1)}s
                         </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-brand-blue font-semibold flex items-center gap-0.5 hover:underline">
+                          Tua đến đoạn này <ChevronRight className="w-3 h-3" />
+                        </span>
                       </div>
                     </div>
                   );
@@ -916,20 +914,20 @@ export default function VideoAnalysisDashboardPage() {
               )}
             </div>
 
-            {/* Bottom Quick Copilot Prompt Box */}
+            {/* Quick Copilot Mini-Chat at Bottom of Right Column */}
             <div className="p-3 border-t border-gray-100 bg-[#F8FAFC]">
               <form onSubmit={handleSendChat} className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Hỏi AI Copilot về hành vi đối tượng trong video..."
+                  placeholder="Hỏi AI Copilot về hành vi đối tượng..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 text-xs px-3 py-2 border border-gray-300 rounded-xl bg-white focus:outline-none focus:border-brand-blue"
+                  className="flex-1 text-xs px-3 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-blue-500/20"
                 />
                 <button
                   type="submit"
-                  disabled={isCopilotThinking}
-                  className="px-3 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50"
+                  disabled={isCopilotThinking || !chatInput.trim()}
+                  className="p-2 bg-[#2563EB] text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
                   <Send className="w-3.5 h-3.5" />
                 </button>
