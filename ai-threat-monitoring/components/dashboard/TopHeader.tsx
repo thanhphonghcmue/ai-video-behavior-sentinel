@@ -38,7 +38,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   unreadNotifications = 2,
   isSidebarCollapsed,
   onToggleSidebar,
-  activeModel = 'gemini-2.5-flash',
+  activeModel = 'gemini-3.8-flash',
   onModelChange,
 }) => {
   const [timeString, setTimeString] = useState<string>('');
@@ -281,9 +281,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {[
-                    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Mặc định - Siêu tốc độ & Bounding Box' },
+                    { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', desc: 'Đời mới nhất - Siêu tốc độ & Bounding Box' },
                     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Suy luận an ninh chuyên sâu nhất' },
-                    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', desc: 'Context 2M tokens cực lớn' },
+                    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Legacy - có thể không khả dụng' },
                     { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash Exp', desc: 'Thử nghiệm thế hệ 2.0' },
                   ].map((m) => (
                     <button
@@ -333,7 +333,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
               {/* Note / Info */}
               <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-100 text-[11px] text-blue-900 leading-relaxed">
-                💡 <strong>Đặc quyền kiến trúc mới:</strong> Bạn có thể sử dụng bất kỳ API Key Google AI Studio mới nào hoặc chuyển sang <strong>Gemini 2.5 Pro</strong> để AI suy luận an ninh sâu sắc hơn, tự động trích xuất chính xác thời gian và bounding box của từng nhân vật!
+                💡 <strong>Đặc quyền kiến trúc mới:</strong> Hệ thống mặc định sử dụng <strong>Gemini 3.8 Flash</strong> (đời mới nhất). Bạn có thể chuyển sang <strong>Gemini 2.5 Pro</strong> để AI suy luận an ninh sâu sắc hơn, hoặc nhập API Key Google AI Studio mới bất kỳ!
               </div>
 
               {/* Actions */}

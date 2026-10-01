@@ -51,7 +51,7 @@ load_dotenv()
 
 # Setup Google GenAI Client
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 genai_client = None
 
@@ -561,10 +561,10 @@ def get_available_models():
         "current_model": MODEL_NAME,
         "available_models": [
             {
-                "id": "gemini-2.5-flash",
-                "name": "Gemini 2.5 Flash",
-                "tag": "Khuyên dùng - Siêu tốc độ",
-                "description": "Nhận diện hành vi đa phương thức, trích xuất bounding box thời gian thực và phân đoạn video tự nhiên."
+                "id": "gemini-3.8-flash",
+                "name": "Gemini 3.8 Flash",
+                "tag": "Khuyên dùng - Đời mới nhất",
+                "description": "Mô hình đời mới nhất: Nhận diện hành vi đa phương thức, trích xuất bounding box và phân đoạn video tốc độ cao."
             },
             {
                 "id": "gemini-2.5-pro",
@@ -573,10 +573,10 @@ def get_available_models():
                 "description": "Mô hình suy luận mạnh mẽ nhất, phân tích logic đe dọa phức tạp và phát hiện dị thường tinh vi."
             },
             {
-                "id": "gemini-1.5-pro",
-                "name": "Gemini 1.5 Pro",
-                "tag": "Context 2M Tokens",
-                "description": "Phân tích các đoạn video giám sát dài hạn với bộ nhớ ngữ cảnh sâu."
+                "id": "gemini-2.5-flash",
+                "name": "Gemini 2.5 Flash (Legacy)",
+                "tag": "Phiên bản cũ",
+                "description": "Phiên bản trước, có thể không khả dụng với API key mới."
             },
             {
                 "id": "gemini-2.0-flash-exp",
