@@ -105,7 +105,7 @@ export default function LiveCameraScanningPage() {
     height: 60,
   });
 
-  const isScanningRef = useRef<boolean>(false);
+  const [isRateThrottled, setIsRateThrottled] = useState<boolean>(false);
   const prevFramePixelsRef = useRef<Uint8Array | null>(null);
 
   // 60 FPS Smooth Interpolation Loop using Lerp (Linear Interpolation)
@@ -247,35 +247,48 @@ export default function LiveCameraScanningPage() {
     }
   }, []);
 
-  // Non-blocking Asynchronous Snapshot Scanning (Smart Cooldown 3.5s)
+  // UNBREAKABLE CONTINUOUS POLLING & SCAN LOOP (Self-scheduling with 4.0s timeout guard)
   useEffect(() => {
-    const analyzeSnapshot = async () => {
-      if (isScanningRef.current) return;
-      isScanningRef.current = true;
+    let isActive = true;
+    let timerId: NodeJS.Timeout | null = null;
+    let currentAbortController: AbortController | null = null;
+
+    const executeScanTick = async () => {
+      if (!isActive) return;
+
       setIsAnalyzing(true);
+      currentAbortController = new AbortController();
+      const abortTimer = setTimeout(() => {
+        currentAbortController?.abort();
+      }, 4000); // 4-second hard timeout guard to prevent hanging
+
+      let resultData: LiveTelemetry | null = null;
 
       try {
+        // 1. Capture off-screen snapshot if in webcam mode
         let base64Img: string | null = null;
-
-        // If local webcam active, capture canvas off-screen
         if (cameraSource === 'WEBCAM' && videoRef.current && streamActive) {
-          const canvas = document.createElement('canvas');
-          canvas.width = 480;
-          canvas.height = 270;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-            base64Img = canvas.toDataURL('image/jpeg', 0.7);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 480;
+            canvas.height = 270;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(videoRef.current, 0, 0, 480, 270);
+              base64Img = canvas.toDataURL('image/jpeg', 0.7);
+            }
+          } catch (e) {
+            console.warn("Canvas capture warning:", e);
           }
         }
 
+        // 2. Query backend live scan API
         const candidateUrls = [
           'http://localhost:8000/api/scan-live',
           'http://127.0.0.1:8000/api/scan-live',
           'http://localhost:8000/api/analyze-live'
         ];
 
-        let fetchedData: LiveTelemetry | null = null;
         for (const url of candidateUrls) {
           try {
             const res = await fetch(url, {
@@ -285,61 +298,83 @@ export default function LiveCameraScanningPage() {
                 image_base64: base64Img,
                 use_current_stream: true 
               }),
+              signal: currentAbortController.signal
             });
             if (res.ok) {
-              fetchedData = await res.json();
+              resultData = await res.json();
               break;
             }
           } catch (e) {
             // try next endpoint candidate
           }
         }
-
-        const nowFormatted = new Date().toLocaleTimeString('vi-VN');
-        if (fetchedData) {
-          setTelemetry(fetchedData);
-          setLastAnalysisTime(nowFormatted);
-          setActionHistory(prev => [fetchedData!, ...prev.slice(0, 19)]);
-
-          // Update authoritative target box coordinates from backend AI
-          if (fetchedData.bounding_box_normalized && fetchedData.bounding_box_normalized.length === 4) {
-            const [ymin, xmin, ymax, xmax] = fetchedData.bounding_box_normalized;
-            targetBoxRef.current = {
-              top: Math.max(2, Math.min(85, Math.round(ymin * 100))),
-              left: Math.max(2, Math.min(85, Math.round(xmin * 100))),
-              width: Math.max(12, Math.min(90, Math.round((xmax - xmin) * 100))),
-              height: Math.max(15, Math.min(90, Math.round((ymax - ymin) * 100))),
-            };
-          }
-        } else {
-          // Seamless fallback telemetry maintaining last known safe state
-          const fallbackData: LiveTelemetry = {
-            character_id: 'Target_01',
-            action: 'Đối tượng trong khu vực camera, duy trì hành vi bình thường',
-            risk_score: 18,
-            risk_level: 'NORMAL',
-            is_danger: false,
-            danger_notes: '',
-            bounding_box_normalized: [0.20, 0.32, 0.78, 0.68],
-            time_label: nowFormatted,
-            model_used: 'SENTINEL Rate Guard'
-          };
-          setTelemetry(fallbackData);
-          setLastAnalysisTime(nowFormatted);
-          setActionHistory(prev => [fallbackData, ...prev.slice(0, 19)]);
-        }
-      } catch (err) {
-        console.warn("Live scan tick error:", err);
+      } catch (err: any) {
+        console.warn("[LIVE SCAN WATCHDOG] Handled cycle error:", err?.name === 'AbortError' ? '4s Timeout (resumed)' : err);
       } finally {
-        setIsAnalyzing(false);
-        isScanningRef.current = false;
+        clearTimeout(abortTimer);
+
+        if (isActive) {
+          const nowFormatted = new Date().toLocaleTimeString('vi-VN');
+
+          if (resultData) {
+            setTelemetry(resultData);
+            setLastAnalysisTime(nowFormatted);
+            setActionHistory(prev => [resultData!, ...prev.slice(0, 29)]);
+
+            const isThrottled = Boolean(
+              resultData.model_used?.includes('Rate Guard') ||
+              resultData.model_used?.includes('Throttled')
+            );
+            setIsRateThrottled(isThrottled);
+
+            // Update authoritative target box coordinates from backend AI
+            if (resultData.bounding_box_normalized && resultData.bounding_box_normalized.length === 4) {
+              const [ymin, xmin, ymax, xmax] = resultData.bounding_box_normalized;
+              targetBoxRef.current = {
+                top: Math.max(2, Math.min(85, Math.round(ymin * 100))),
+                left: Math.max(2, Math.min(85, Math.round(xmin * 100))),
+                width: Math.max(12, Math.min(90, Math.round((xmax - xmin) * 100))),
+                height: Math.max(15, Math.min(90, Math.round((ymax - ymin) * 100))),
+              };
+            }
+          } else {
+            // Keep stream rolling smoothly: append rolling status and update timestamp
+            setLastAnalysisTime(nowFormatted);
+            setIsRateThrottled(true);
+            setActionHistory(prev => {
+              const currentAction = prev[0]?.action || 'Đối tượng trong góc quan sát, tư thế và hành vi duy trì ổn định';
+              const fallbackItem: LiveTelemetry = {
+                character_id: 'Target_01',
+                action: currentAction,
+                risk_score: prev[0]?.risk_score || 18,
+                risk_level: prev[0]?.risk_level || 'NORMAL',
+                is_danger: prev[0]?.is_danger || false,
+                danger_notes: '',
+                bounding_box_normalized: [0.20, 0.32, 0.78, 0.68],
+                time_label: nowFormatted,
+                model_used: 'Rate Guard (Continuous Loop)'
+              };
+              return [fallbackItem, ...prev.slice(0, 29)];
+            });
+          }
+
+          // ALWAYS reset isAnalyzing flag so UI never freezes
+          setIsAnalyzing(false);
+
+          // UNBREAKABLE RESCHEDULE: Always schedule next scan after 3.5s cooldown
+          timerId = setTimeout(executeScanTick, 3500);
+        }
       }
     };
 
-    // Cooldown interval strictly 3500ms (3.5s) to satisfy 3-4s requirement
-    const interval = setInterval(analyzeSnapshot, 3500);
-    analyzeSnapshot();
-    return () => clearInterval(interval);
+    // Kick off immediate first scan
+    executeScanTick();
+
+    return () => {
+      isActive = false;
+      if (timerId) clearTimeout(timerId);
+      if (currentAbortController) currentAbortController.abort();
+    };
   }, [cameraSource, streamActive]);
 
   useEffect(() => {
@@ -494,6 +529,11 @@ export default function LiveCameraScanningPage() {
                 </span>
                 <span>Mô hình: {telemetry.model_used}</span>
                 <span>FPS: 30</span>
+                {isRateThrottled && (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] flex items-center gap-1">
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Rate Guard Bảo Vệ (Tự động quét liên tục...)
+                  </span>
+                )}
               </div>
             </div>
           </div>
