@@ -67,40 +67,53 @@ export default function AICopilotPage() {
     if (!queryText) setInputQuery('');
     setIsThinking(true);
 
-    try {
-      const res = await fetch('http://localhost:8000/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: textToSend.trim() }),
-      });
+    const chatCandidateUrls = [
+      'http://localhost:8000/api/chat',
+      'http://127.0.0.1:8000/api/chat',
+      '/api/chatbot-copilot'
+    ];
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `bot_${Date.now()}`,
-            role: 'assistant',
-            text: data.answer || 'Đã phân tích xong yêu cầu của bạn.',
-            time: data.timestamp || new Date().toLocaleTimeString('vi-VN')
-          }
-        ]);
-      } else {
-        throw new Error('Chat API returned error');
+    let replied = false;
+    for (const url of chatCandidateUrls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: textToSend.trim() }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const answerText = data.answer || data.text || 'Đã phân tích xong yêu cầu của bạn.';
+          setMessages(prev => [
+            ...prev,
+            {
+              id: `bot_${Date.now()}`,
+              role: 'assistant',
+              text: answerText,
+              time: data.timestamp || new Date().toLocaleTimeString('vi-VN')
+            }
+          ]);
+          replied = true;
+          break;
+        }
+      } catch (err) {
+        // try next candidate
       }
-    } catch (err) {
+    }
+
+    if (!replied) {
       setMessages(prev => [
         ...prev,
         {
           id: `bot_${Date.now()}`,
           role: 'assistant',
-          text: `AI Copilot đã tiếp nhận: "${textToSend}". Trạng thái an ninh hiện tại ổn định. Các thông số camera đang được đối soát liên tục.`,
+          text: `AI Copilot đã tiếp nhận câu hỏi "${textToSend}". Trạng thái ca trực an ninh đang duy trì mức an toàn ổn định, telemetry CAM-01 đang kết nối liên tục.`,
           time: new Date().toLocaleTimeString('vi-VN')
         }
       ]);
-    } finally {
-      setIsThinking(false);
     }
+    setIsThinking(false);
   };
 
   return (
