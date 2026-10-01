@@ -10,18 +10,20 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          red: "#D70018",      // Sentinel Alert Crimson Red
-          darkRed: "#B30013",  // Deep Crimson Red Hover/Alert
-          lightRed: "#FFF1F2", // Crimson Tint / Soft Alert Background
-          grayBg: "#F4F6F8",   // Neutral soft background
-          border: "#E5E7EB",   // Sleek subtle border
-          dark: "#111827",     // High-contrast primary text
-          muted: "#6B7280",    // Secondary text
+          blue: "#2563EB",       // Tech Indigo Blue Accent
+          blueHover: "#1D4ED8",  // Tech Indigo Blue Dark
+          blueLight: "#EFF6FF",  // Tech Indigo Tint Soft
+          navy: "#0F172A",       // Deep Corporate Slate Navy (Primary Text/Header)
+          slate: "#1E293B",      // Slate Navy 800
+          grayBg: "#F8FAFC",     // Soft Neutral Slate Background
+          border: "#E2E8F0",     // Sleek subtle border
+          dark: "#0F172A",       // High-contrast primary text
+          muted: "#64748B",      // Secondary text
         },
         threat: {
-          low: "#10B981",       // Safe Green (<50%)
-          medium: "#F59E0B",    // Suspicious Amber (50-80%)
-          critical: "#D70018",  // High Danger Alert Red (>80%)
+          low: "#059669",        // Safe Emerald Green (<40%)
+          medium: "#D97706",     // Warning Amber (40-70%)
+          critical: "#EA580C",   // High Risk Deep Coral-Orange (>70%)
         }
       },
       animation: {

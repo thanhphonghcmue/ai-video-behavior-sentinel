@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { SidebarNav } from './SidebarNav';
@@ -15,62 +15,76 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   children,
   currentThreatLevel = 'LOW',
 }) => {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isSirenActive, setIsSirenActive] = useState<boolean>(false);
+  const [activeModel, setActiveModel] = useState<string>('gemini-2.5-flash');
 
   return (
-    <div className="min-h-screen bg-[#F4F6F8] text-[#111827] flex flex-col font-sans">
-      {/* Left Navigation Sidebar */}
-      <SidebarNav />
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans">
+      {/* Left Collapsible Navigation Sidebar */}
+      <SidebarNav
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        activeModel={activeModel}
+      />
 
       {/* Main Container Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
         <TopHeader
           currentThreatLevel={currentThreatLevel}
           onOpenSirenModal={() => setIsSirenActive(true)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          activeModel={activeModel}
+          onModelChange={(m) => setActiveModel(m)}
         />
 
         {/* Main Content Pane */}
-        <main className="ml-64 flex-1 p-5 overflow-y-auto">
+        <main 
+          className={`flex-1 p-5 overflow-y-auto transition-all duration-300 ${
+            isSidebarCollapsed ? 'ml-18' : 'ml-64'
+          }`}
+        >
           {children}
         </main>
       </div>
 
-      {/* Emergency Siren Modal Overlay */}
+      {/* Emergency Siren Modal Overlay (Uses Deep Coral-Orange, NO RED) */}
       {isSirenActive && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full border-2 border-brand-red shadow-2xl overflow-hidden">
-            <div className="bg-brand-red p-6 text-white text-center relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full border border-orange-200 shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-orange-600 to-amber-600 p-6 text-white text-center relative">
               <button
                 onClick={() => setIsSirenActive(false)}
                 className="absolute top-4 right-4 text-white/80 hover:text-white"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
-              <div className="w-16 h-16 mx-auto rounded-full bg-white/20 flex items-center justify-center mb-3 animate-bounce">
-                <Volume2 className="w-9 h-9 text-white" />
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-white/20 flex items-center justify-center mb-3 animate-bounce">
+                <Volume2 className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-xl font-black uppercase tracking-wide">
-                KÍCH HOẠT CÒI BÁO ĐỘNG KHẨN CẤP
+              <h2 className="text-lg font-black uppercase tracking-wide">
+                KÍCH HOẠT CÒI BÁO ĐỘNG HIỆN TRƯỜNG
               </h2>
-              <p className="text-xs text-white/80 mt-1">
-                Tín hiệu còi báo âm lượng cao & đèn cảnh báo đỏ tại điểm giám sát
+              <p className="text-xs text-orange-100 mt-1">
+                Tín hiệu còi báo âm lượng cao & đèn cảnh báo tại điểm giám sát
               </p>
             </div>
             <div className="p-6 space-y-4">
-              <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-brand-red flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <div className="p-4 rounded-xl bg-orange-50 border border-orange-200 text-xs text-[#EA580C] flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <p>
-                  Hành động này sẽ gửi tín hiệu ưu tiên cao nhất tới toàn bộ nhân viên an ninh hiện trường và tự động lưu đoạn video bằng chứng.
+                  Hành động này sẽ gửi tín hiệu cảnh báo ưu tiên cao nhất tới nhân viên an ninh và tự động lưu video bằng chứng vào nhật ký.
                 </p>
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-700">Lý do kích hoạt nhanh:</label>
-                <select className="w-full text-xs p-2.5 border border-gray-300 rounded-xl bg-white focus:outline-none focus:border-brand-red font-medium">
-                  <option>Xâm nhập vùng cấm chưa được cấp phép</option>
-                  <option>Phát hiện ẩu đả / Vung tay bạo lực nguy hiểm</option>
-                  <option>Đối tượng khả nghi lục lọi tủ tiền / quầy hàng</option>
+                <select className="w-full text-xs p-2.5 border border-gray-300 rounded-xl bg-white focus:outline-none focus:border-brand-blue font-medium">
+                  <option>Xâm nhập vùng cấm / Khu vực nhạy cảm</option>
+                  <option>Phát hiện ẩu đả / Cử chỉ nguy hiểm bạo lực</option>
+                  <option>Đối tượng lén lút lảng vảng quá lâu</option>
                   <option>Người té ngã bất thường cần trợ giúp y tế</option>
                 </select>
               </div>
@@ -84,10 +98,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    alert("CÒI BÁO ĐỘNG ĐÃ ĐƯỢC PHÁT! Đèn báo động khu vực đang chớp đỏ.");
+                    alert("CÒI BÁO ĐỘNG ĐÃ ĐƯỢC PHÁT! Đèn báo động khu vực đang chớp sáng.");
                     setIsSirenActive(false);
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-brand-red text-white text-xs font-bold hover:bg-brand-darkRed transition-colors shadow-md shadow-brand-red/30 active:scale-95"
+                  className="flex-1 py-2.5 rounded-xl bg-[#EA580C] text-white text-xs font-bold hover:bg-orange-700 transition-colors shadow-md shadow-orange-500/30 active:scale-95"
                 >
                   BẬT CÒI HÚ NGAY
                 </button>
