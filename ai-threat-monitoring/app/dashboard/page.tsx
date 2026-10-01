@@ -6,7 +6,6 @@ import {
   Pause, 
   UploadCloud, 
   Film, 
-  Camera, 
   Sparkles, 
   Clock, 
   Filter, 
@@ -19,12 +18,11 @@ import {
   ShieldCheck, 
   X, 
   ChevronRight, 
-  Bot, 
-  Maximize2,
-  Users,
-  Eye,
-  Layers,
-  ArrowRight
+  Eye, 
+  Info,
+  RefreshCw,
+  SlidersHorizontal,
+  ChevronDown
 } from 'lucide-react';
 
 export interface TimeInterval {
@@ -89,21 +87,26 @@ export default function VideoAnalysisDashboardPage() {
   const [videoSourceUrl, setVideoSourceUrl] = useState<string>('');
   const [uploadedFileName, setUploadedFileName] = useState<string>('sample_surveillance.mp4');
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [aiModelUsed, setAiModelUsed] = useState<string>('Gemini 2.5 Flash');
+  const [sceneSummary, setSceneSummary] = useState<string>(
+    'Khung cảnh giám sát đa đối tượng: Nhiều phương tiện giao thông và người đi bộ di chuyển trong khu vực an ninh.'
+  );
 
   // Multi-Subject & Event States
   const [subjects, setSubjects] = useState<SubjectTrack[]>([
     {
       target_id: 'Target_01',
       subject_class: 'Person',
-      bounding_box_normalized: [180, 160, 680, 360],
+      bounding_box_normalized: [160, 160, 680, 360],
       time_intervals: [
         {
           start_time: 0.0,
           end_time: 14.0,
           time_label: '00:00 - 00:14',
-          action_description: 'Chủ thể di chuyển đều bước dọc lối đi quan sát không gian xung quanh',
-          risk_score: 18,
+          action_description: 'Đi bộ đều bước trên vỉa hè, di chuyển an toàn',
+          risk_score: 10,
           risk_level: 'LOW',
           is_danger: false,
         }
@@ -112,23 +115,23 @@ export default function VideoAnalysisDashboardPage() {
     {
       target_id: 'Target_02',
       subject_class: 'Motorbike',
-      bounding_box_normalized: [240, 420, 640, 640],
+      bounding_box_normalized: [220, 380, 640, 580],
       time_intervals: [
         {
-          start_time: 8.0,
-          end_time: 25.0,
-          time_label: '00:08 - 00:25',
-          action_description: 'Phương tiện lưu thông cùng chiều, duy trì cự ly an toàn chuẩn quy chuẩn',
-          risk_score: 25,
-          risk_level: 'LOW',
-          is_danger: false,
+          start_time: 2.0,
+          end_time: 16.0,
+          time_label: '00:02 - 00:16',
+          action_description: 'Di chuyển tốc độ cao, lạng lách qua các phương tiện khác',
+          risk_score: 85,
+          risk_level: 'CRITICAL',
+          is_danger: true,
         }
       ]
     },
     {
       target_id: 'Target_03',
       subject_class: 'Pedestrian',
-      bounding_box_normalized: [150, 680, 580, 860],
+      bounding_box_normalized: [140, 660, 560, 840],
       time_intervals: [
         {
           start_time: 0.0,
@@ -144,6 +147,22 @@ export default function VideoAnalysisDashboardPage() {
           end_time: 28.0,
           time_label: '00:18 - 00:28',
           action_description: 'Dừng chân tạm thời tại điểm chờ vạch qua đường',
+          risk_score: 18,
+          risk_level: 'LOW',
+          is_danger: false,
+        }
+      ]
+    },
+    {
+      target_id: 'Target_04',
+      subject_class: 'Vehicle',
+      bounding_box_normalized: [300, 60, 720, 320],
+      time_intervals: [
+        {
+          start_time: 8.0,
+          end_time: 22.0,
+          time_label: '00:08 - 00:22',
+          action_description: 'Ô tô con giảm tốc độ nhường đường an toàn',
           risk_score: 20,
           risk_level: 'LOW',
           is_danger: false,
@@ -161,14 +180,30 @@ export default function VideoAnalysisDashboardPage() {
       start_time: 0.0,
       end_time: 14.0,
       time_label: '00:00 - 00:14',
-      action: 'Chủ thể di chuyển đều bước dọc lối đi quan sát không gian xung quanh',
-      risk_score: 18,
+      action: 'Đi bộ đều bước trên vỉa hè, di chuyển an toàn',
+      action_description: 'Đi bộ đều bước trên vỉa hè, di chuyển an toàn',
+      risk_score: 10,
       risk_level: 'NORMAL',
       is_danger: false,
-      bounding_box_normalized: [180, 160, 680, 360]
+      bounding_box_normalized: [160, 160, 680, 360]
     },
     {
       id: 'evt_2',
+      character_id: 'Target_02',
+      target_id: 'Target_02',
+      subject_class: 'Motorbike',
+      start_time: 2.0,
+      end_time: 16.0,
+      time_label: '00:02 - 00:16',
+      action: 'Di chuyển tốc độ cao, lạng lách qua các phương tiện khác',
+      action_description: 'Di chuyển tốc độ cao, lạng lách qua các phương tiện khác',
+      risk_score: 85,
+      risk_level: 'CRITICAL',
+      is_danger: true,
+      bounding_box_normalized: [220, 380, 640, 580]
+    },
+    {
+      id: 'evt_3',
       character_id: 'Target_03',
       target_id: 'Target_03',
       subject_class: 'Pedestrian',
@@ -176,27 +211,29 @@ export default function VideoAnalysisDashboardPage() {
       end_time: 10.0,
       time_label: '00:00 - 00:10',
       action: 'Người đi bộ sát lề an toàn, chú ý quan sát đèn tín hiệu',
+      action_description: 'Người đi bộ sát lề an toàn, chú ý quan sát đèn tín hiệu',
       risk_score: 15,
       risk_level: 'NORMAL',
       is_danger: false,
-      bounding_box_normalized: [150, 680, 580, 860]
-    },
-    {
-      id: 'evt_3',
-      character_id: 'Target_02',
-      target_id: 'Target_02',
-      subject_class: 'Motorbike',
-      start_time: 8.0,
-      end_time: 25.0,
-      time_label: '00:08 - 00:25',
-      action: 'Phương tiện lưu thông cùng chiều, duy trì cự ly an toàn chuẩn quy chuẩn',
-      risk_score: 25,
-      risk_level: 'NORMAL',
-      is_danger: false,
-      bounding_box_normalized: [240, 420, 640, 640]
+      bounding_box_normalized: [140, 660, 560, 840]
     },
     {
       id: 'evt_4',
+      character_id: 'Target_04',
+      target_id: 'Target_04',
+      subject_class: 'Vehicle',
+      start_time: 8.0,
+      end_time: 22.0,
+      time_label: '00:08 - 00:22',
+      action: 'Ô tô con giảm tốc độ nhường đường an toàn',
+      action_description: 'Ô tô con giảm tốc độ nhường đường an toàn',
+      risk_score: 20,
+      risk_level: 'NORMAL',
+      is_danger: false,
+      bounding_box_normalized: [300, 60, 720, 320]
+    },
+    {
+      id: 'evt_5',
       character_id: 'Target_03',
       target_id: 'Target_03',
       subject_class: 'Pedestrian',
@@ -204,10 +241,11 @@ export default function VideoAnalysisDashboardPage() {
       end_time: 28.0,
       time_label: '00:18 - 00:28',
       action: 'Dừng chân tạm thời tại điểm chờ vạch qua đường',
-      risk_score: 20,
+      action_description: 'Dừng chân tạm thời tại điểm chờ vạch qua đường',
+      risk_score: 18,
       risk_level: 'NORMAL',
       is_danger: false,
-      bounding_box_normalized: [150, 680, 580, 860]
+      bounding_box_normalized: [140, 660, 560, 840]
     }
   ]);
 
@@ -229,7 +267,7 @@ export default function VideoAnalysisDashboardPage() {
   const [chatInput, setChatInput] = useState<string>('');
   const [isCopilotThinking, setIsCopilotThinking] = useState<boolean>(false);
 
-  // Synchronize Playback Time
+  // Synchronize Playback Time & Auto Highlight Active Event Card
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     const cur = videoRef.current.currentTime;
@@ -240,6 +278,12 @@ export default function VideoAnalysisDashboardPage() {
     if (activeEvt && activeEvt.id !== activeEventId) {
       setActiveEventId(activeEvt.id);
       setActiveTargetId(activeEvt.target_id || activeEvt.character_id);
+
+      // Auto scroll card into view gently
+      const cardEl = cardRefs.current[activeEvt.id];
+      if (cardEl && timelineContainerRef.current) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
   };
 
@@ -259,17 +303,19 @@ export default function VideoAnalysisDashboardPage() {
     }
   };
 
-  // Jump to specific event
+  // Interactive Seek: Clicking any event card programmatically seeks video & auto-plays instantly
   const jumpToEvent = useCallback((event: VideoActionEvent) => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = event.start_time;
     setCurrentTime(event.start_time);
     setActiveEventId(event.id);
     setActiveTargetId(event.target_id || event.character_id);
-    if (!isPlaying) {
-      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
-    }
-  }, [isPlaying]);
+    
+    // Auto-play instantly
+    videoRef.current.play()
+      .then(() => setIsPlaying(true))
+      .catch(() => {});
+  }, []);
 
   // Jump to specific target
   const jumpToTarget = useCallback((targetId: string) => {
@@ -280,63 +326,85 @@ export default function VideoAnalysisDashboardPage() {
     }
   }, [events, jumpToEvent]);
 
-  // Handle Video Upload
+  // Robust Multi-Endpoint Video Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadedFileName(file.name);
     setIsUploading(true);
+    setUploadError(null);
+    setUploadProgress('Đang tải video lên máy chủ AI...');
 
     const formData = new FormData();
     formData.append('file', file);
 
-    try {
-      const res = await fetch('http://localhost:8000/api/upload-video', {
-        method: 'POST',
-        body: formData,
-      });
+    const endpoints = [
+      '/backend-api/upload-video',
+      'http://127.0.0.1:8000/api/upload-video',
+      'http://localhost:8000/api/upload-video'
+    ];
 
-      if (!res.ok) {
-        throw new Error('Upload failed');
-      }
+    let lastErrorMsg = '';
+    let success = false;
 
-      const data = await res.json();
-      if (data.video_url) {
-        setVideoSourceUrl(data.video_url);
-      }
-      if (data.duration) {
-        setDuration(data.duration);
-      }
-      if (data.ai_model_used) {
-        setAiModelUsed(data.ai_model_used);
-      }
+    for (const url of endpoints) {
+      try {
+        setUploadProgress(`Đang kết nối qua ${url}...`);
+        const res = await fetch(url, {
+          method: 'POST',
+          body: formData,
+        });
 
-      if (data.subjects && data.subjects.length > 0) {
-        setSubjects(data.subjects);
-      }
+        if (res.ok) {
+          const data = await res.json();
+          success = true;
 
-      if (data.events && data.events.length > 0) {
-        setEvents(data.events);
-        setActiveEventId(data.events[0].id || 'evt_1');
-        setActiveTargetId(data.events[0].target_id || 'Target_01');
-      }
+          if (data.video_url) {
+            setVideoSourceUrl(data.video_url);
+          }
+          if (data.duration) {
+            setDuration(data.duration);
+          }
+          if (data.ai_model_used) {
+            setAiModelUsed(data.ai_model_used);
+          }
+          if (data.scene_summary) {
+            setSceneSummary(data.scene_summary);
+          }
+          if (data.subjects && data.subjects.length > 0) {
+            setSubjects(data.subjects);
+          }
+          if (data.events && data.events.length > 0) {
+            setEvents(data.events);
+            setActiveEventId(data.events[0].id || 'evt_1');
+            setActiveTargetId(data.events[0].target_id || 'Target_01');
+          }
 
-      setChatMessages(prev => [
-        ...prev,
-        {
-          id: `msg_${Date.now()}`,
-          role: 'assistant',
-          text: `Đã phân tích xong video "${file.name}" bằng ${data.ai_model_used}. Nhận diện tổng cộng ${data.total_subjects_detected || data.characters_detected?.length || 0} đối tượng với ${data.events?.length || 0} phân đoạn hành vi động.`,
-          time: 'Vừa xong'
+          setChatMessages(prev => [
+            ...prev,
+            {
+              id: `msg_${Date.now()}`,
+              role: 'assistant',
+              text: `Đã phân tích video "${file.name}" thành công bằng ${data.ai_model_used}. Nhận diện ${data.total_subjects_detected || data.subjects?.length || 0} đối tượng với ${data.events?.length || 0} mốc hành vi động.`,
+              time: 'Vừa xong'
+            }
+          ]);
+          break;
+        } else {
+          lastErrorMsg = `Máy chủ phản hồi mã lỗi ${res.status}`;
         }
-      ]);
-    } catch (err) {
-      console.error(err);
-      alert('Tải video lên backend thất bại. Vui lòng kiểm tra cổng 8000.');
-    } finally {
-      setIsUploading(false);
+      } catch (err: any) {
+        lastErrorMsg = err?.message || 'Lỗi kết nối mạng';
+      }
     }
+
+    if (!success) {
+      setUploadError(`Không thể kết nối đến backend trên cổng 8000 (${lastErrorMsg}). Hãy đảm bảo server.py đang chạy.`);
+    }
+
+    setIsUploading(false);
+    setUploadProgress('');
   };
 
   // Chat Copilot Submission
@@ -355,25 +423,38 @@ export default function VideoAnalysisDashboardPage() {
     setChatMessages(prev => [...prev, userMsg]);
     setIsCopilotThinking(true);
 
-    try {
-      const res = await fetch('http://localhost:8000/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setChatMessages(prev => [
-          ...prev,
-          {
-            id: `bot_${Date.now()}`,
-            role: 'assistant',
-            text: data.answer || 'Đã ghi nhận yêu cầu an ninh.',
-            time: 'Vừa xong'
-          }
-        ]);
-      }
-    } catch (err) {
+    const chatEndpoints = [
+      '/backend-api/chat',
+      'http://127.0.0.1:8000/api/chat',
+      'http://localhost:8000/api/chat'
+    ];
+
+    let answered = false;
+    for (const url of chatEndpoints) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setChatMessages(prev => [
+            ...prev,
+            {
+              id: `bot_${Date.now()}`,
+              role: 'assistant',
+              text: data.answer || 'Đã ghi nhận yêu cầu an ninh.',
+              time: 'Vừa xong'
+            }
+          ]);
+          answered = true;
+          break;
+        }
+      } catch (err) {}
+    }
+
+    if (!answered) {
       setChatMessages(prev => [
         ...prev,
         {
@@ -383,9 +464,8 @@ export default function VideoAnalysisDashboardPage() {
           time: 'Vừa xong'
         }
       ]);
-    } finally {
-      setIsCopilotThinking(false);
     }
+    setIsCopilotThinking(false);
   };
 
   // Distinct targets for filter
@@ -399,7 +479,6 @@ export default function VideoAnalysisDashboardPage() {
     return true;
   });
 
-  // Calculate current active event & risk
   const currentActiveEvent = events.find(e => e.id === activeEventId) || events[0];
   const isCurrentDangerous = (currentActiveEvent?.risk_score ?? 0) >= 70;
 
@@ -408,7 +487,7 @@ export default function VideoAnalysisDashboardPage() {
       {/* Top Banner & File Upload Bar */}
       <div className="bg-white rounded-2xl p-4 border border-[#E2E8F0] shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-brand-blue">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-brand-blue flex-shrink-0">
             <Film className="w-5 h-5" />
           </div>
           <div>
@@ -431,20 +510,56 @@ export default function VideoAnalysisDashboardPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="video/mp4,video/webm,video/quicktime"
+            accept="video/mp4,video/webm,video/quicktime,video/avi"
             onChange={handleFileUpload}
             className="hidden"
           />
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all shadow-sm shadow-blue-500/20 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all shadow-sm shadow-blue-500/20 disabled:opacity-50"
           >
-            <UploadCloud className="w-4 h-4" />
-            <span>{isUploading ? 'AI Đang Quét Video...' : 'Tải Lên Video Mới (MP4 / WebM)'}</span>
+            {isUploading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>{uploadProgress || 'Đang xử lý chunked video...'}</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="w-4 h-4" />
+                <span>Tải Lên Video Mới (MP4 / WebM)</span>
+              </>
+            )}
           </button>
         </div>
       </div>
+
+      {/* Upload Error Banner if server is offline */}
+      {uploadError && (
+        <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 text-xs text-[#EA580C] flex items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{uploadError}</span>
+          </div>
+          <button
+            onClick={() => setUploadError(null)}
+            className="text-gray-400 hover:text-gray-600 font-bold px-2 py-1"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
+
+      {/* Scene Summary Banner from Gemini 2.5 Flash */}
+      {sceneSummary && (
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 to-slate-50 border border-blue-100 flex items-start gap-2.5 text-xs">
+          <Sparkles className="w-4 h-4 text-brand-blue flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-bold text-[#0F172A] mr-1.5">Tóm Tắt Bối Cảnh Video (Gemini AI Vision):</span>
+            <span className="text-gray-700 leading-relaxed">{sceneSummary}</span>
+          </div>
+        </div>
+      )}
 
       {/* Main Split-Screen Grid: 60% Left / 40% Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -522,7 +637,7 @@ export default function VideoAnalysisDashboardPage() {
                     }}
                     className={`absolute border-2 transition-all duration-200 cursor-pointer pointer-events-auto rounded-lg ${
                       isDanger
-                        ? 'border-[#EA580C] bg-orange-500/15 shadow-lg shadow-orange-500/30'
+                        ? 'border-[#EA580C] bg-orange-500/15 shadow-lg shadow-orange-500/30 ring-2 ring-orange-400/50'
                         : isActive
                         ? 'border-[#2563EB] bg-blue-500/15 ring-2 ring-blue-400/50'
                         : isIntervalActive
@@ -625,7 +740,7 @@ export default function VideoAnalysisDashboardPage() {
 
                 {/* Target jump badges */}
                 <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-                  <span className="text-gray-400 font-semibold text-[11px]">Định vị nhanh:</span>
+                  <span className="text-gray-400 font-semibold text-[11px]">Định vị:</span>
                   {distinctTargetIds.map((tid) => (
                     <button
                       key={tid}
@@ -787,7 +902,7 @@ export default function VideoAnalysisDashboardPage() {
                           {isActive ? (
                             <span className="text-brand-blue font-bold flex items-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
-                              Đang xem đoạn này
+                              Đang phát đoạn này
                             </span>
                           ) : (
                             'Bấm để nhảy tới mốc thời gian'
