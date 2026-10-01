@@ -1117,8 +1117,11 @@ async def upload_video_endpoint(
 # =============================================================================
 # LIVE WEBCAM RATE GUARD & EXPONENTIAL BACKOFF ENGINE
 # =============================================================================
+# =============================================================================
+# LIVE WEBCAM RATE GUARD & EXPONENTIAL BACKOFF ENGINE
+# =============================================================================
 _last_live_gemini_call_time: float = 0.0
-_live_cooldown_seconds: float = 6.0  # Enforce strict 6s cooldown (within 5-7s mandate)
+_live_cooldown_seconds: float = 3.5  # Smart cooldown (3-4 seconds as requested)
 _live_backoff_cooldown: float = 0.0  # Dynamic exponential backoff for 429 mitigation
 _last_known_live_telemetry: Dict[str, Any] = {
     "character_id": "Target_01",
@@ -1127,9 +1130,32 @@ _last_known_live_telemetry: Dict[str, Any] = {
     "risk_level": "NORMAL",
     "is_danger": False,
     "danger_notes": "",
+    "bounding_box_normalized": [0.20, 0.32, 0.78, 0.68],
     "time_label": datetime.now().strftime("%H:%M:%S"),
     "model_used": "SENTINEL Rate Guard"
 }
+
+
+def get_live_bounding_box(raw_bbox=None) -> List[float]:
+    """Extracts or interpolates live bounding box using Gemini output or OpenCV hardware face tracking."""
+    if isinstance(raw_bbox, list) and len(raw_bbox) == 4:
+        try:
+            return [round(max(0.0, min(1.0, float(c) if float(c) <= 1.0 else float(c)/1000.0)), 4) for c in raw_bbox]
+        except Exception:
+            pass
+    # Check OpenCV hardware face tracking from CameraManager
+    if camera_manager.detected_face:
+        df = camera_manager.detected_face
+        fw = 640
+        fh = 480
+        if camera_manager.current_frame is not None:
+            fh, fw = camera_manager.current_frame.shape[:2]
+        ymin = max(0.05, df["top"] / fh - 0.05)
+        xmin = max(0.05, df["left"] / fw - 0.08)
+        ymax = min(0.95, df["bottom"] / fh + 0.38)
+        xmax = min(0.95, df["right"] / fw + 0.08)
+        return [round(ymin, 3), round(xmin, 3), round(ymax, 3), round(xmax, 3)]
+    return [0.20, 0.32, 0.78, 0.68]
 
 
 @app.post("/api/scan-live")
@@ -1137,9 +1163,9 @@ _last_known_live_telemetry: Dict[str, Any] = {
 async def scan_live_endpoint(req: AnalyzeFrameRequest):
     """
     THROTTLED LIVE SCAN ENDPOINT WITH EXPONENTIAL BACKOFF (HTTP 429 MITIGATION):
-    - Enforces a minimum cooldown interval (5-7 seconds) between consecutive Gemini calls.
+    - Enforces a minimum cooldown interval (3-4 seconds) between consecutive Gemini calls.
     - If called during the cooldown window, debounces and immediately returns the cached
-      safe telemetry state with updated timestamp.
+      safe telemetry state with updated timestamp and real-time bounding box.
     - If 429 (ResourceExhausted) occurs, applies exponential backoff, gracefully catches the
       exception, and returns a safe fallback telemetry payload to keep UI & Chatbot stable.
     - Uses a lightweight prompt and downscaled image payload to minimize token consumption.
@@ -1151,11 +1177,12 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
     elapsed = current_time - _last_live_gemini_call_time
     effective_cooldown = _live_cooldown_seconds + _live_backoff_cooldown
 
-    # 1. Strict Debounce / Cooldown Check (Enforce minimum 5 to 7s interval)
+    # 1. Strict Debounce / Cooldown Check (Enforce minimum 3.5s interval)
     if elapsed < effective_cooldown and _last_known_live_telemetry:
         telemetry_copy = dict(_last_known_live_telemetry)
         telemetry_copy["time_label"] = now_str
         telemetry_copy["model_used"] = f"Rate Guard ({int(effective_cooldown - elapsed)}s CD)"
+        telemetry_copy["bounding_box_normalized"] = get_live_bounding_box(_last_known_live_telemetry.get("bounding_box_normalized"))
         return telemetry_copy
 
     # 2. Extract and downscale frame for lightweight prompt payload
@@ -1188,9 +1215,9 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
     # 3. Call Gemini if available with retry & backoff
     if genai_client and pil_image is not None:
         lightweight_prompt = """
-        Camera an ninh trực tiếp. Nhận diện đối tượng (Target_01) và hành vi thực tế ngắn gọn bằng tiếng Việt.
+        Camera an ninh trực tiếp. Nhận diện đối tượng (Target_01), hành vi ngắn gọn bằng tiếng Việt, và tọa độ bounding box [ymin, xmin, ymax, xmax] (float 0.0 - 1.0).
         Trả về JSON:
-        {"character_id":"Target_01","action":"mô tả hành vi","risk_score":15,"risk_level":"NORMAL","is_danger":false,"danger_notes":""}
+        {"character_id":"Target_01","action":"mô tả hành vi","risk_score":15,"risk_level":"NORMAL","is_danger":false,"danger_notes":"","bounding_box_normalized":[0.2,0.3,0.8,0.7]}
         """
         models_to_try = [
             "gemini-2.5-flash",
@@ -1206,12 +1233,13 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
                 res = genai_client.models.generate_content(
                     model=model_id,
                     contents=[pil_image, lightweight_prompt],
-                    config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 150}
+                    config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 180}
                 )
                 if res and res.text:
                     data = json.loads(res.text)
                     r_score = int(data.get("risk_score", 15))
                     lvl = "CRITICAL" if r_score >= 70 else ("WARNING" if r_score >= 40 else "NORMAL")
+                    bbox = get_live_bounding_box(data.get("bounding_box_normalized"))
                     
                     new_telemetry = {
                         "character_id": data.get("character_id", "Target_01"),
@@ -1220,6 +1248,7 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
                         "risk_level": lvl,
                         "is_danger": bool(data.get("is_danger", r_score >= 70)),
                         "danger_notes": data.get("danger_notes", ""),
+                        "bounding_box_normalized": bbox,
                         "time_label": now_str,
                         "model_used": model_id
                     }
@@ -1240,6 +1269,7 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
 
     # 4. Graceful Fallback Telemetry (Safe State) if Gemini failed or throttled
     _last_known_live_telemetry["time_label"] = now_str
+    _last_known_live_telemetry["bounding_box_normalized"] = get_live_bounding_box(_last_known_live_telemetry.get("bounding_box_normalized"))
     if _live_backoff_cooldown > 0:
         _last_known_live_telemetry["model_used"] = "Gemini Rate Guard (Throttled)"
     else:

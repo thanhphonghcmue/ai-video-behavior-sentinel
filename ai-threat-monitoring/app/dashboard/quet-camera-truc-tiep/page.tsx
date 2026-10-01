@@ -27,6 +27,14 @@ interface LiveTelemetry {
   danger_notes: string;
   time_label: string;
   model_used: string;
+  bounding_box_normalized?: number[];
+}
+
+interface BoundingBox {
+  top: number;    // % (0 - 100)
+  left: number;   // % (0 - 100)
+  width: number;  // % (0 - 100)
+  height: number; // % (0 - 100)
 }
 
 export default function LiveCameraScanningPage() {
@@ -44,6 +52,7 @@ export default function LiveCameraScanningPage() {
     risk_level: 'NORMAL',
     is_danger: false,
     danger_notes: '',
+    bounding_box_normalized: [0.20, 0.30, 0.80, 0.70],
     time_label: '12:00:00',
     model_used: 'Gemini 2.5 Flash'
   });
@@ -57,6 +66,7 @@ export default function LiveCameraScanningPage() {
       risk_level: 'NORMAL',
       is_danger: false,
       danger_notes: '',
+      bounding_box_normalized: [0.20, 0.30, 0.80, 0.70],
       time_label: new Date().toLocaleTimeString('vi-VN'),
       model_used: 'Gemini Rate Guard'
     },
@@ -67,10 +77,147 @@ export default function LiveCameraScanningPage() {
       risk_level: 'NORMAL',
       is_danger: false,
       danger_notes: '',
+      bounding_box_normalized: [0.20, 0.30, 0.80, 0.70],
       time_label: new Date(Date.now() - 6000).toLocaleTimeString('vi-VN'),
       model_used: 'Gemini Rate Guard'
     }
   ]);
+
+  // Smooth Bounding Box Coordinates (Percentages: 0 - 100)
+  const [boxCoords, setBoxCoords] = useState<BoundingBox>({
+    top: 20,
+    left: 30,
+    width: 40,
+    height: 60,
+  });
+
+  const targetBoxRef = useRef<BoundingBox>({
+    top: 20,
+    left: 30,
+    width: 40,
+    height: 60,
+  });
+
+  const currentBoxRef = useRef<BoundingBox>({
+    top: 20,
+    left: 30,
+    width: 40,
+    height: 60,
+  });
+
+  const isScanningRef = useRef<boolean>(false);
+  const prevFramePixelsRef = useRef<Uint8Array | null>(null);
+
+  // 60 FPS Smooth Interpolation Loop using Lerp (Linear Interpolation)
+  useEffect(() => {
+    let animId: number;
+    const lerp = (start: number, end: number, factor: number) => start + (end - start) * factor;
+
+    const tick = () => {
+      const cur = currentBoxRef.current;
+      const target = targetBoxRef.current;
+
+      const newTop = lerp(cur.top, target.top, 0.18);
+      const newLeft = lerp(cur.left, target.left, 0.18);
+      const newWidth = lerp(cur.width, target.width, 0.18);
+      const newHeight = lerp(cur.height, target.height, 0.18);
+
+      currentBoxRef.current = {
+        top: newTop,
+        left: newLeft,
+        width: newWidth,
+        height: newHeight,
+      };
+
+      // Only update state if moved noticeably (> 0.05%) to minimize React re-renders
+      if (
+        Math.abs(newTop - cur.top) > 0.05 ||
+        Math.abs(newLeft - cur.left) > 0.05 ||
+        Math.abs(newWidth - cur.width) > 0.05 ||
+        Math.abs(newHeight - cur.height) > 0.05
+      ) {
+        setBoxCoords({
+          top: Math.round(newTop * 10) / 10,
+          left: Math.round(newLeft * 10) / 10,
+          width: Math.round(newWidth * 10) / 10,
+          height: Math.round(newHeight * 10) / 10,
+        });
+      }
+
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
+  // Lightweight Local Motion Tracking (Runs every 120ms on off-screen 48x27 canvas)
+  useEffect(() => {
+    if (cameraSource !== 'WEBCAM' || !streamActive) return;
+
+    const motionCanvas = document.createElement('canvas');
+    motionCanvas.width = 48;
+    motionCanvas.height = 27;
+    const ctx = motionCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const motionInterval = setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.readyState < 2) return;
+
+      try {
+        ctx.drawImage(video, 0, 0, 48, 27);
+        const imgData = ctx.getImageData(0, 0, 48, 27);
+        const data = imgData.data;
+
+        if (prevFramePixelsRef.current && prevFramePixelsRef.current.length === data.length / 4) {
+          let sumX = 0;
+          let sumY = 0;
+          let motionCount = 0;
+          const prev = prevFramePixelsRef.current;
+
+          for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+            const gray = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) >> 10;
+            const diff = Math.abs(gray - prev[p]);
+            if (diff > 25) {
+              const x = p % 48;
+              const y = Math.floor(p / 48);
+              sumX += x;
+              sumY += y;
+              motionCount++;
+            }
+            prev[p] = gray;
+          }
+
+          // If noticeable motion detected, smoothly drift target bounding box toward centroid
+          if (motionCount > 15) {
+            const centroidX = (sumX / motionCount / 48) * 100;
+            const centroidY = (sumY / motionCount / 27) * 100;
+
+            const curTarget = targetBoxRef.current;
+            const newLeft = Math.max(5, Math.min(65, centroidX - curTarget.width / 2));
+            const newTop = Math.max(5, Math.min(60, centroidY - curTarget.height / 3));
+
+            targetBoxRef.current = {
+              ...curTarget,
+              left: Math.round(curTarget.left + (newLeft - curTarget.left) * 0.4),
+              top: Math.round(curTarget.top + (newTop - curTarget.top) * 0.4),
+            };
+          }
+        } else {
+          const grayBuf = new Uint8Array(48 * 27);
+          for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+            grayBuf[p] = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) >> 10;
+          }
+          prevFramePixelsRef.current = grayBuf;
+        }
+      } catch (err) {
+        // silent
+      }
+    }, 120);
+
+    return () => clearInterval(motionInterval);
+  }, [cameraSource, streamActive]);
 
   // Start webcam
   const startWebcam = useCallback(async () => {
@@ -100,14 +247,17 @@ export default function LiveCameraScanningPage() {
     }
   }, []);
 
-  // Poll snapshot analysis with 5.5s interval (Rate Guard 5-7s mitigation)
+  // Non-blocking Asynchronous Snapshot Scanning (Smart Cooldown 3.5s)
   useEffect(() => {
     const analyzeSnapshot = async () => {
+      if (isScanningRef.current) return;
+      isScanningRef.current = true;
       setIsAnalyzing(true);
+
       try {
         let base64Img: string | null = null;
 
-        // If local webcam active, capture canvas
+        // If local webcam active, capture canvas off-screen
         if (cameraSource === 'WEBCAM' && videoRef.current && streamActive) {
           const canvas = document.createElement('canvas');
           canvas.width = 480;
@@ -150,6 +300,17 @@ export default function LiveCameraScanningPage() {
           setTelemetry(fetchedData);
           setLastAnalysisTime(nowFormatted);
           setActionHistory(prev => [fetchedData!, ...prev.slice(0, 19)]);
+
+          // Update authoritative target box coordinates from backend AI
+          if (fetchedData.bounding_box_normalized && fetchedData.bounding_box_normalized.length === 4) {
+            const [ymin, xmin, ymax, xmax] = fetchedData.bounding_box_normalized;
+            targetBoxRef.current = {
+              top: Math.max(2, Math.min(85, Math.round(ymin * 100))),
+              left: Math.max(2, Math.min(85, Math.round(xmin * 100))),
+              width: Math.max(12, Math.min(90, Math.round((xmax - xmin) * 100))),
+              height: Math.max(15, Math.min(90, Math.round((ymax - ymin) * 100))),
+            };
+          }
         } else {
           // Seamless fallback telemetry maintaining last known safe state
           const fallbackData: LiveTelemetry = {
@@ -159,6 +320,7 @@ export default function LiveCameraScanningPage() {
             risk_level: 'NORMAL',
             is_danger: false,
             danger_notes: '',
+            bounding_box_normalized: [0.20, 0.32, 0.78, 0.68],
             time_label: nowFormatted,
             model_used: 'SENTINEL Rate Guard'
           };
@@ -170,11 +332,12 @@ export default function LiveCameraScanningPage() {
         console.warn("Live scan tick error:", err);
       } finally {
         setIsAnalyzing(false);
+        isScanningRef.current = false;
       }
     };
 
-    // Strict 5.5s cooldown interval (mitigates 429 quota exhaustion)
-    const interval = setInterval(analyzeSnapshot, 5500);
+    // Cooldown interval strictly 3500ms (3.5s) to satisfy 3-4s requirement
+    const interval = setInterval(analyzeSnapshot, 3500);
     analyzeSnapshot();
     return () => clearInterval(interval);
   }, [cameraSource, streamActive]);
@@ -284,15 +447,18 @@ export default function LiveCameraScanningPage() {
                 />
               )}
 
-              {/* Dynamic Live Bounding Box */}
+              {/* Dynamic Live Bounding Box with Smooth Lerp + CSS Interpolation */}
               <div 
                 style={{
-                  top: '25%',
-                  left: '32%',
-                  width: '36%',
-                  height: '58%',
+                  top: `${boxCoords.top}%`,
+                  left: `${boxCoords.left}%`,
+                  width: `${boxCoords.width}%`,
+                  height: `${boxCoords.height}%`,
+                  transition: 'top 0.25s ease-out, left 0.25s ease-out, width 0.25s ease-out, height 0.25s ease-out',
+                  willChange: 'top, left, width, height',
+                  transform: 'translate3d(0, 0, 0)'
                 }}
-                className={`absolute border-2 rounded-xl transition-all duration-300 pointer-events-none ${
+                className={`absolute border-2 rounded-2xl transition-colors duration-300 pointer-events-none ${
                   isDanger
                     ? 'border-[#EA580C] bg-orange-500/10 shadow-lg shadow-orange-500/30'
                     : isWarning
@@ -300,12 +466,22 @@ export default function LiveCameraScanningPage() {
                     : 'border-emerald-500 bg-emerald-500/10'
                 }`}
               >
+                {/* Reticle Corner Brackets */}
+                <span className="absolute -top-1 -left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-inherit"></span>
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-inherit"></span>
+                <span className="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-inherit"></span>
+                <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-inherit"></span>
+
+                {/* Target Identification Badge */}
                 <div className="absolute -top-7 left-0 whitespace-nowrap">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold shadow-md flex items-center gap-1 text-white ${
+                  <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold shadow-md flex items-center gap-1.5 text-white ${
                     isDanger ? 'bg-[#EA580C]' : isWarning ? 'bg-amber-600' : 'bg-emerald-600'
                   }`}>
                     <span>{telemetry.character_id}</span>
-                    <span>• {telemetry.risk_score}%</span>
+                    <span className="opacity-80 font-mono">• {telemetry.risk_score}%</span>
+                    {isDanger && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                    )}
                   </span>
                 </div>
               </div>
