@@ -35,6 +35,7 @@ export interface TimeInterval {
   is_danger?: boolean;
   danger_summary?: string;
   behavioral_assessment?: string;
+  bounding_box_normalized?: number[];
 }
 
 export interface SubjectTrack {
@@ -591,7 +592,15 @@ export default function VideoAnalysisDashboard() {
                     return Math.max(0.0, Math.min(1.0, v));
                   };
 
-                  const bbox = subj.bounding_box_normalized || [0.15, 0.20, 0.75, 0.45];
+                  const isActive = (subj.target_id === activeTargetId);
+                  const activeInterval = subj.time_intervals?.find(
+                    iv => currentTime >= iv.start_time && currentTime <= iv.end_time
+                  );
+                  const isIntervalActive = Boolean(activeInterval);
+                  const isDanger = (activeInterval?.risk_score ?? 0) >= 70;
+
+                  // Use interval-specific dynamic bounding box if available, otherwise subject default
+                  const bbox = activeInterval?.bounding_box_normalized || subj.bounding_box_normalized || [0.15, 0.20, 0.75, 0.45];
                   const ymin = norm(bbox[0] ?? 0.15);
                   const xmin = norm(bbox[1] ?? 0.20);
                   const ymax = norm(bbox[2] ?? 0.75);
@@ -602,13 +611,6 @@ export default function VideoAnalysisDashboard() {
                   const left = videoBounds.offsetX + (xmin * videoBounds.renderedWidth);
                   const width = Math.max(28, (xmax - xmin) * videoBounds.renderedWidth);
                   const height = Math.max(28, (ymax - ymin) * videoBounds.renderedHeight);
-
-                  const isActive = (subj.target_id === activeTargetId);
-                  const activeInterval = subj.time_intervals?.find(
-                    iv => currentTime >= iv.start_time && currentTime <= iv.end_time
-                  );
-                  const isIntervalActive = Boolean(activeInterval);
-                  const isDanger = (activeInterval?.risk_score ?? 0) >= 70;
 
                   return (
                     <div
@@ -622,8 +624,10 @@ export default function VideoAnalysisDashboard() {
                         left: `${left}px`,
                         height: `${height}px`,
                         width: `${width}px`,
+                        transition: 'top 0.25s ease-out, left 0.25s ease-out, width 0.25s ease-out, height 0.25s ease-out',
+                        willChange: 'top, left, width, height',
                       }}
-                      className={`absolute border-2 transition-all duration-150 cursor-pointer pointer-events-auto rounded-lg ${
+                      className={`absolute border-2 cursor-pointer pointer-events-auto rounded-lg ${
                         isDanger
                           ? 'border-[#EA580C] bg-orange-500/15 shadow-lg shadow-orange-500/30 ring-2 ring-orange-400/50'
                           : isActive

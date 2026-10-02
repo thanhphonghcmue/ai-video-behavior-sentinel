@@ -140,6 +140,7 @@ class TimeInterval(BaseModel):
     is_danger: bool = False
     danger_summary: Optional[str] = None
     behavioral_assessment: Optional[str] = None
+    bounding_box_normalized: Optional[List[float]] = None
 
 class SubjectTrack(BaseModel):
     target_id: str
@@ -842,31 +843,47 @@ async def upload_video_endpoint(
             print(f"[MODULE 1] Polling Google AI Studio file state: {getattr(uploaded_file.state, 'name', 'UNKNOWN')} ({wait_time}s)")
 
         prompt = f"""
-        Analyze the attached video accurately. Describe the ACTUAL visual context (e.g., classroom, street, office). Do NOT assume it is a traffic scene unless explicitly visible. Identify all distinct human subjects or entities.
+        Analyze the attached video accurately. Describe the ACTUAL visual context (e.g., street traffic, intersection, classroom, hallway, office). Do NOT default to preset templates unless explicitly visible. Identify ALL distinct moving entities and human subjects.
 
         MANDATORY TEMPORAL MICRO-SEGMENTATION RULES:
-        "Analyze the video with extreme granularity. Break down the timeline into short, precise behavioral intervals (e.g., 00:00-00:05, 00:05-00:12). If multiple human subjects or objects appear (e.g., Teacher, Students, moving entities), track EACH subject independently with distinct IDs (Target_01, Target_02, etc.). Provide specific, factual descriptions of actions for each small time segment. Do NOT group the entire video into one single time interval."
+        - Analyze the video with extreme granularity. Break down the timeline into short, precise behavioral intervals (e.g., 00:00-00:04, 00:04-00:08, 00:08-00:13).
+        - Track EACH subject independently with distinct IDs (Target_01, Target_02, Target_03, etc.).
+        - Provide specific, factual descriptions of actions for each small time segment. Do NOT group the entire video into one single macro interval.
+
+        CRITICAL BOUNDING BOX CALIBRATION RULES (PIXEL-PRECISE GROUNDING):
+        - Bounding box coordinates [ymin, xmin, ymax, xmax] must strictly enclose the physical boundaries of the moving entity (float between 0.0 and 1.0).
+        - For VEHICLES (Motorbike, Car, Truck, Bicycle): The box MUST tightly frame the vehicle chassis, wheels, and rider/driver. NEVER lock onto the road, background scenery, railings, guardrails, or empty lanes.
+        - For PEDESTRIANS / PEOPLE: The box MUST fit closely from the crown of the head to the bottom of the feet.
+        - For each time interval, provide the precise 'bounding_box_normalized' for that specific time slice so the bounding box tracks the moving subject smoothly across the screen.
+
+        UNLIMITED MULTI-SUBJECT TRACKING & DYNAMIC RISK EVALUATION:
+        - Do NOT group multiple vehicles or people into a single generic ID. Identify EVERY distinct moving subject with unique IDs (e.g. Target_01 [Motorbike], Target_02 [Car], Target_03 [Pedestrian]).
+        - Assess physical motion dynamics (velocity, sudden swerves, safe distance, wrong-way movement, collision hazards):
+          * 0-35% (Low): Lawful movement, steady speed, safe following distance, normal activity.
+          * 40-69% (Warning): Sudden swerving, high speed near intersections, unsafe lane cutting, loitering.
+          * 70-100% (Critical): Imminent collision hazard, wrong-way driving, falling from vehicle, physical conflict, boundary intrusion.
+        - NEVER assign flat, static 20% scores. Every score must be dynamically justified by observable physical actions.
 
         OUTPUT SPECIFICATIONS (STRICT JSON ONLY):
         - 'scene_summary': Concise Vietnamese description of the actual observed environment and overall activities.
         - 'total_subjects': Integer count of all distinct subjects detected.
         - 'subjects': Array of objects with:
           * 'target_id': "Target_01", "Target_02", etc.
-          * 'class': Specific subject role/class (e.g. "Teacher", "Student", "Security", "Person", "Vehicle").
+          * 'class': Specific subject role/class (e.g. "Motorbike", "Car", "Pedestrian", "Truck", "Bicycle", "Person", "Teacher", "Student").
           * 'bounding_box_normalized': [ymin, xmin, ymax, xmax] as float numbers strictly between 0.0 and 1.0.
           * 'time_intervals': Array of MULTIPLE fine-grained micro-intervals covering the video sequentially from 0.0 to {duration_sec}s. Each interval must have:
             - 'start_time': Float start timestamp in seconds (e.g. 0.0).
             - 'end_time': Float end timestamp in seconds (e.g. 4.5).
             - 'action_description': Specific, factual description of what the subject is physically doing during this exact time slice in Vietnamese.
             - 'risk_score': 0 to 100 based on security/danger level:
-              * Low (0-39%): Normal activity, compliant behavior.
+              * Low (0-35%): Normal activity, compliant behavior.
               * Warning (40-69%): Suspicious or unusual activity requiring monitoring.
               * Critical (>=70%): Clear threat, aggressive behavior, hazard.
             - 'risk_level': "Low", "Warning", or "Critical".
             - 'behavioral_assessment': Specific security reasoning in Vietnamese explaining why this score was assigned.
             - 'is_danger': boolean (true if risk_score >= 70 else false).
             - 'danger_summary': Short warning note if dangerous, else empty string.
-            - 'bounding_box_normalized': Optional [ymin, xmin, ymax, xmax] coordinates for this specific interval (float 0.0 - 1.0).
+            - 'bounding_box_normalized': [ymin, xmin, ymax, xmax] coordinates for this specific interval (float 0.0 - 1.0).
 
         Return STRICT valid JSON only.
         """
@@ -1023,7 +1040,8 @@ async def upload_video_endpoint(
                         risk_level=r_lvl,
                         is_danger=is_d,
                         danger_summary=d_sum,
-                        behavioral_assessment=b_assess
+                        behavioral_assessment=b_assess,
+                        bounding_box_normalized=int_bbox
                     ))
 
                     evt_id = f"evt_{len(events_list)+1}"
@@ -1117,12 +1135,24 @@ _live_cooldown_seconds: float = 3.5  # Smart cooldown (3-4 seconds as requested)
 _live_backoff_cooldown: float = 0.0  # Dynamic exponential backoff for 429 mitigation
 _last_known_live_telemetry: Dict[str, Any] = {
     "character_id": "Target_01",
+    "subject_class": "Person",
     "action": "Chủ thể hiện diện trong góc quan sát an ninh, tư thế và cử chỉ ổn định",
     "risk_score": 18,
     "risk_level": "NORMAL",
     "is_danger": False,
     "danger_notes": "",
     "bounding_box_normalized": [0.20, 0.32, 0.78, 0.68],
+    "subjects": [
+        {
+            "target_id": "Target_01",
+            "class": "Person",
+            "bounding_box_normalized": [0.20, 0.32, 0.78, 0.68],
+            "action": "Chủ thể hiện diện trong góc quan sát an ninh, tư thế và cử chỉ ổn định",
+            "risk_score": 18,
+            "risk_level": "NORMAL",
+            "is_danger": False
+        }
+    ],
     "time_label": datetime.now().strftime("%H:%M:%S"),
     "model_used": "SENTINEL Rate Guard"
 }
@@ -1207,9 +1237,37 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
     # 3. Call Gemini if available with retry & backoff
     if genai_client and pil_image is not None:
         lightweight_prompt = """
-        Camera an ninh trực tiếp. Nhận diện đối tượng (Target_01), hành vi ngắn gọn bằng tiếng Việt, và tọa độ bounding box [ymin, xmin, ymax, xmax] (float 0.0 - 1.0).
-        Trả về JSON:
-        {"character_id":"Target_01","action":"mô tả hành vi","risk_score":15,"risk_level":"NORMAL","is_danger":false,"danger_notes":"","bounding_box_normalized":[0.2,0.3,0.8,0.7]}
+        Phân tích hình ảnh camera an ninh trực tiếp theo thời gian thực (Real-Time Vision & Behavior Sentinel).
+        Nhận diện chính xác tất cả các đối tượng chuyển động trong khung hình (Người, Xe máy, Ô tô, Người đi bộ, v.v.).
+
+        QUY TẮC BOUNDING BOX CHUẨN XÁC [ymin, xmin, ymax, xmax] (FLOAT 0.0 - 1.0):
+        - Bounding box phải ôm khít đường bao vật lý của thực thể:
+          * Xe máy / Ô tô / Phương tiện: Khung phải ôm sát thân xe, bánh xe và người lái. Tuyệt đối KHÔNG bắt vào lan can, dải phân cách, mặt đường hay vật thể tĩnh.
+          * Người / Đi bộ: Khung bao trọn vẹn từ đỉnh đầu đến gót chân.
+        - Đánh giá nguy cơ động 0-100%: 0-35% an toàn/tuân thủ, 40-69% cảnh báo/rẽ gấp/lảng vảng, 70-100% nguy cấp/xâm nhập/va chạm.
+
+        TRẢ VỀ STRICT VALID JSON DUY NHẤT THEO ĐỊNH DẠNG:
+        {
+          "character_id": "Target_01",
+          "subject_class": "Motorbike / Car / Pedestrian / Person",
+          "action": "Mô tả ngắn gọn hành vi thực tế bằng tiếng Việt",
+          "risk_score": 18,
+          "risk_level": "NORMAL",
+          "is_danger": false,
+          "danger_notes": "",
+          "bounding_box_normalized": [0.2, 0.3, 0.8, 0.7],
+          "subjects": [
+            {
+              "target_id": "Target_01",
+              "class": "Motorbike / Car / Pedestrian / Person",
+              "bounding_box_normalized": [0.2, 0.3, 0.8, 0.7],
+              "action": "Mô tả hành vi thực tế",
+              "risk_score": 18,
+              "risk_level": "NORMAL",
+              "is_danger": false
+            }
+          ]
+        }
         """
         models_to_try = [
             "gemini-2.5-flash",
@@ -1225,7 +1283,7 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
                 res = genai_client.models.generate_content(
                     model=model_id,
                     contents=[pil_image, lightweight_prompt],
-                    config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 180}
+                    config={"response_mime_type": "application/json", "temperature": 0.1, "max_output_tokens": 300}
                 )
                 if res and res.text:
                     data = json.loads(res.text)
@@ -1233,14 +1291,43 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
                     lvl = "CRITICAL" if r_score >= 70 else ("WARNING" if r_score >= 40 else "NORMAL")
                     bbox = get_live_bounding_box(data.get("bounding_box_normalized"))
                     
+                    parsed_subjects = []
+                    raw_subjects = data.get("subjects")
+                    if isinstance(raw_subjects, list) and raw_subjects:
+                        for s in raw_subjects:
+                            s_bbox = get_live_bounding_box(s.get("bounding_box_normalized"))
+                            s_score = int(s.get("risk_score", r_score))
+                            s_lvl = "CRITICAL" if s_score >= 70 else ("WARNING" if s_score >= 40 else "NORMAL")
+                            parsed_subjects.append({
+                                "target_id": s.get("target_id") or f"Target_{len(parsed_subjects)+1:02d}",
+                                "class": s.get("class") or data.get("subject_class") or "Person",
+                                "bounding_box_normalized": s_bbox,
+                                "action": s.get("action") or data.get("action") or "Hiện diện trong góc quan sát",
+                                "risk_score": s_score,
+                                "risk_level": s_lvl,
+                                "is_danger": bool(s.get("is_danger", s_score >= 70))
+                            })
+                    else:
+                        parsed_subjects = [{
+                            "target_id": data.get("character_id", "Target_01"),
+                            "class": data.get("subject_class", "Person"),
+                            "bounding_box_normalized": bbox,
+                            "action": data.get("action", "Hiện diện bình thường trong góc quan sát an ninh"),
+                            "risk_score": r_score,
+                            "risk_level": lvl,
+                            "is_danger": bool(data.get("is_danger", r_score >= 70))
+                        }]
+
                     new_telemetry = {
-                        "character_id": data.get("character_id", "Target_01"),
-                        "action": data.get("action", "Hiện diện bình thường trong góc quan sát an ninh"),
+                        "character_id": data.get("character_id", parsed_subjects[0]["target_id"]),
+                        "subject_class": data.get("subject_class", parsed_subjects[0]["class"]),
+                        "action": data.get("action", parsed_subjects[0]["action"]),
                         "risk_score": r_score,
                         "risk_level": lvl,
                         "is_danger": bool(data.get("is_danger", r_score >= 70)),
                         "danger_notes": data.get("danger_notes", ""),
                         "bounding_box_normalized": bbox,
+                        "subjects": parsed_subjects,
                         "time_label": now_str,
                         "model_used": model_id
                     }
@@ -1262,6 +1349,16 @@ async def scan_live_endpoint(req: AnalyzeFrameRequest):
     # 4. Graceful Fallback Telemetry (Safe State) if Gemini failed or throttled
     _last_known_live_telemetry["time_label"] = now_str
     _last_known_live_telemetry["bounding_box_normalized"] = get_live_bounding_box(_last_known_live_telemetry.get("bounding_box_normalized"))
+    if not _last_known_live_telemetry.get("subjects"):
+        _last_known_live_telemetry["subjects"] = [{
+            "target_id": _last_known_live_telemetry.get("character_id", "Target_01"),
+            "class": _last_known_live_telemetry.get("subject_class", "Person"),
+            "bounding_box_normalized": _last_known_live_telemetry["bounding_box_normalized"],
+            "action": _last_known_live_telemetry.get("action", "Hiện diện trong tầm quan sát"),
+            "risk_score": _last_known_live_telemetry.get("risk_score", 18),
+            "risk_level": _last_known_live_telemetry.get("risk_level", "NORMAL"),
+            "is_danger": _last_known_live_telemetry.get("is_danger", False)
+        }]
     if _live_backoff_cooldown > 0:
         _last_known_live_telemetry["model_used"] = "Gemini Rate Guard (Throttled)"
     else:

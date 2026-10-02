@@ -18,8 +18,19 @@ import {
   Maximize2
 } from 'lucide-react';
 
+interface SubjectLiveTrack {
+  target_id: string;
+  class?: string;
+  bounding_box_normalized: number[];
+  action: string;
+  risk_score: number;
+  risk_level: string;
+  is_danger?: boolean;
+}
+
 interface LiveTelemetry {
   character_id: string;
+  subject_class?: string;
   action: string;
   risk_score: number;
   risk_level: string;
@@ -28,6 +39,7 @@ interface LiveTelemetry {
   time_label: string;
   model_used: string;
   bounding_box_normalized?: number[];
+  subjects?: SubjectLiveTrack[];
 }
 
 interface BoundingBox {
@@ -37,22 +49,51 @@ interface BoundingBox {
   height: number; // % (0 - 100)
 }
 
+interface VideoRenderBounds {
+  renderedWidth: number;
+  renderedHeight: number;
+  offsetX: number;
+  offsetY: number;
+}
+
 export default function LiveCameraScanningPage() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const backendImgRef = useRef<HTMLImageElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [streamActive, setStreamActive] = useState<boolean>(false);
   const [cameraSource, setCameraSource] = useState<'WEBCAM' | 'BACKEND'>('BACKEND');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<string>('');
+
+  // Video viewport bounding box calibration (eliminates letterbox/pillarbox floating)
+  const [videoBounds, setVideoBounds] = useState<VideoRenderBounds>({
+    renderedWidth: 0,
+    renderedHeight: 0,
+    offsetX: 0,
+    offsetY: 0,
+  });
   
   // Real-time telemetry state
   const [telemetry, setTelemetry] = useState<LiveTelemetry>({
     character_id: 'Target_01',
+    subject_class: 'Person',
     action: 'Chủ thể hiện diện trong góc quan sát an ninh, tư thế ổn định',
     risk_score: 18,
     risk_level: 'NORMAL',
     is_danger: false,
     danger_notes: '',
     bounding_box_normalized: [0.20, 0.30, 0.80, 0.70],
+    subjects: [
+      {
+        target_id: 'Target_01',
+        class: 'Person',
+        bounding_box_normalized: [0.20, 0.30, 0.80, 0.70],
+        action: 'Chủ thể hiện diện trong góc quan sát an ninh, tư thế ổn định',
+        risk_score: 18,
+        risk_level: 'NORMAL',
+        is_danger: false,
+      }
+    ],
     time_label: '12:00:00',
     model_used: 'Gemini 2.5 Flash'
   });
@@ -246,6 +287,79 @@ export default function LiveCameraScanningPage() {
       setStreamActive(false);
     }
   }, []);
+
+  // Dynamic Intrinsic Coordinate Calibration (Eliminates Letterbox / Pillarbox Margin Drift)
+  const calculateVideoBounds = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const clientWidth = container.clientWidth;
+    const clientHeight = container.clientHeight;
+    if (!clientWidth || !clientHeight) return;
+
+    let mediaWidth = 16;
+    let mediaHeight = 9;
+
+    if (cameraSource === 'BACKEND' && backendImgRef.current) {
+      const img = backendImgRef.current;
+      if (img.naturalWidth && img.naturalHeight) {
+        mediaWidth = img.naturalWidth;
+        mediaHeight = img.naturalHeight;
+      }
+    } else if (cameraSource === 'WEBCAM' && videoRef.current) {
+      const vid = videoRef.current;
+      if (vid.videoWidth && vid.videoHeight) {
+        mediaWidth = vid.videoWidth;
+        mediaHeight = vid.videoHeight;
+      }
+    }
+
+    const mediaRatio = mediaWidth / mediaHeight;
+    const containerRatio = clientWidth / clientHeight;
+
+    let renderedWidth = clientWidth;
+    let renderedHeight = clientHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > mediaRatio) {
+      // Container is wider than media -> pillarbox (black bars on left/right)
+      renderedHeight = clientHeight;
+      renderedWidth = clientHeight * mediaRatio;
+      offsetX = (clientWidth - renderedWidth) / 2;
+      offsetY = 0;
+    } else {
+      // Container is taller than media -> letterbox (black bars on top/bottom)
+      renderedWidth = clientWidth;
+      renderedHeight = clientWidth / mediaRatio;
+      offsetX = 0;
+      offsetY = (clientHeight - renderedHeight) / 2;
+    }
+
+    setVideoBounds({
+      renderedWidth: Math.round(renderedWidth),
+      renderedHeight: Math.round(renderedHeight),
+      offsetX: Math.round(offsetX),
+      offsetY: Math.round(offsetY),
+    });
+  }, [cameraSource]);
+
+  useEffect(() => {
+    calculateVideoBounds();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const ro = new ResizeObserver(() => {
+      calculateVideoBounds();
+    });
+    ro.observe(container);
+    window.addEventListener('resize', calculateVideoBounds);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', calculateVideoBounds);
+    };
+  }, [calculateVideoBounds]);
 
   // UNBREAKABLE CONTINUOUS POLLING & SCAN LOOP (Self-scheduling with 4.0s timeout guard)
   useEffect(() => {
@@ -460,13 +574,18 @@ export default function LiveCameraScanningPage() {
             </div>
 
             {/* Video Viewport with Live Bounding Box Overlay */}
-            <div className="relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden select-none">
+            <div 
+              ref={containerRef}
+              className="relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden select-none"
+            >
               {cameraSource === 'BACKEND' ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
+                  ref={backendImgRef}
                   src="http://localhost:8000/video_feed"
                   alt="Live Camera Feed"
                   className="w-full h-full object-contain"
+                  onLoad={() => calculateVideoBounds()}
                   onError={(e) => {
                     // Fallback to placeholder if backend video feed fails
                     (e.target as HTMLElement).style.display = 'none';
@@ -479,47 +598,127 @@ export default function LiveCameraScanningPage() {
                   playsInline
                   muted
                   className="w-full h-full object-contain"
+                  onLoadedMetadata={() => calculateVideoBounds()}
                 />
               )}
 
-              {/* Dynamic Live Bounding Box with Smooth Lerp + CSS Interpolation */}
-              <div 
-                style={{
-                  top: `${boxCoords.top}%`,
-                  left: `${boxCoords.left}%`,
-                  width: `${boxCoords.width}%`,
-                  height: `${boxCoords.height}%`,
-                  transition: 'top 0.25s ease-out, left 0.25s ease-out, width 0.25s ease-out, height 0.25s ease-out',
-                  willChange: 'top, left, width, height',
-                  transform: 'translate3d(0, 0, 0)'
-                }}
-                className={`absolute border-2 rounded-2xl transition-colors duration-300 pointer-events-none ${
-                  isDanger
-                    ? 'border-[#EA580C] bg-orange-500/10 shadow-lg shadow-orange-500/30'
-                    : isWarning
-                    ? 'border-amber-500 bg-amber-500/10'
-                    : 'border-emerald-500 bg-emerald-500/10'
-                }`}
-              >
-                {/* Reticle Corner Brackets */}
-                <span className="absolute -top-1 -left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-inherit"></span>
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-inherit"></span>
-                <span className="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-inherit"></span>
-                <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-inherit"></span>
+              {/* Exact Coordinate Video Overlay (Matches intrinsic media bounding rect) */}
+              {videoBounds.renderedWidth > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: `${videoBounds.offsetY}px`,
+                    left: `${videoBounds.offsetX}px`,
+                    width: `${videoBounds.renderedWidth}px`,
+                    height: `${videoBounds.renderedHeight}px`,
+                    pointerEvents: 'none',
+                  }}
+                  className="overflow-hidden"
+                >
+                  {/* Multi-subject or Primary Bounding Box */}
+                  {telemetry.subjects && telemetry.subjects.length > 0 ? (
+                    telemetry.subjects.map((subj, sIdx) => {
+                      const sBbox = subj.bounding_box_normalized || [0.2, 0.3, 0.8, 0.7];
+                      const sYmin = Math.max(0, Math.min(1, sBbox[0] > 1 ? sBbox[0] / 1000 : sBbox[0]));
+                      const sXmin = Math.max(0, Math.min(1, sBbox[1] > 1 ? sBbox[1] / 1000 : sBbox[1]));
+                      const sYmax = Math.max(0, Math.min(1, sBbox[2] > 1 ? sBbox[2] / 1000 : sBbox[2]));
+                      const sXmax = Math.max(0, Math.min(1, sBbox[3] > 1 ? sBbox[3] / 1000 : sBbox[3]));
 
-                {/* Target Identification Badge */}
-                <div className="absolute -top-7 left-0 whitespace-nowrap">
-                  <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold shadow-md flex items-center gap-1.5 text-white ${
-                    isDanger ? 'bg-[#EA580C]' : isWarning ? 'bg-amber-600' : 'bg-emerald-600'
-                  }`}>
-                    <span>{telemetry.character_id}</span>
-                    <span className="opacity-80 font-mono">• {telemetry.risk_score}%</span>
-                    {isDanger && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                    )}
-                  </span>
+                      const topPct = sYmin * 100;
+                      const leftPct = sXmin * 100;
+                      const widthPct = Math.max(8, (sXmax - sXmin) * 100);
+                      const heightPct = Math.max(10, (sYmax - sYmin) * 100);
+
+                      const sDanger = subj.risk_score >= 70;
+                      const sWarn = subj.risk_score >= 40 && subj.risk_score < 70;
+
+                      return (
+                        <div
+                          key={`${subj.target_id}-${sIdx}`}
+                          style={{
+                            top: `${topPct}%`,
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            height: `${heightPct}%`,
+                            transition: 'top 0.25s ease-out, left 0.25s ease-out, width 0.25s ease-out, height 0.25s ease-out',
+                            willChange: 'top, left, width, height',
+                          }}
+                          className={`absolute border-2 rounded-xl transition-colors duration-300 pointer-events-none ${
+                            sDanger
+                              ? 'border-[#EA580C] bg-orange-500/10 shadow-lg shadow-orange-500/30'
+                              : sWarn
+                              ? 'border-amber-500 bg-amber-500/10'
+                              : 'border-emerald-500 bg-emerald-500/10'
+                          }`}
+                        >
+                          {/* Reticle Corner Brackets */}
+                          <span className="absolute -top-1 -left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-inherit"></span>
+                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-inherit"></span>
+                          <span className="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-inherit"></span>
+                          <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-inherit"></span>
+
+                          {/* Subject Badge */}
+                          <div className="absolute -top-7 left-0 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-md flex items-center gap-1.5 text-white ${
+                              sDanger ? 'bg-[#EA580C]' : sWarn ? 'bg-amber-600' : 'bg-emerald-600'
+                            }`}>
+                              <span>{subj.target_id}</span>
+                              {subj.class && (
+                                <span className="text-[9px] opacity-80">({subj.class})</span>
+                              )}
+                              <span className="opacity-80 font-mono">• {subj.risk_score}%</span>
+                              {sDanger && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    /* Fallback Single Lerp Bounding Box */
+                    <div 
+                      style={{
+                        top: `${boxCoords.top}%`,
+                        left: `${boxCoords.left}%`,
+                        width: `${boxCoords.width}%`,
+                        height: `${boxCoords.height}%`,
+                        transition: 'top 0.25s ease-out, left 0.25s ease-out, width 0.25s ease-out, height 0.25s ease-out',
+                        willChange: 'top, left, width, height',
+                      }}
+                      className={`absolute border-2 rounded-2xl transition-colors duration-300 pointer-events-none ${
+                        isDanger
+                          ? 'border-[#EA580C] bg-orange-500/10 shadow-lg shadow-orange-500/30'
+                          : isWarning
+                          ? 'border-amber-500 bg-amber-500/10'
+                          : 'border-emerald-500 bg-emerald-500/10'
+                      }`}
+                    >
+                      {/* Reticle Corner Brackets */}
+                      <span className="absolute -top-1 -left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-inherit"></span>
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-inherit"></span>
+                      <span className="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-inherit"></span>
+                      <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-inherit"></span>
+
+                      {/* Target Identification Badge */}
+                      <div className="absolute -top-7 left-0 whitespace-nowrap">
+                        <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-bold shadow-md flex items-center gap-1.5 text-white ${
+                          isDanger ? 'bg-[#EA580C]' : isWarning ? 'bg-amber-600' : 'bg-emerald-600'
+                        }`}>
+                          <span>{telemetry.character_id}</span>
+                          {telemetry.subject_class && (
+                            <span className="text-[9px] opacity-80">({telemetry.subject_class})</span>
+                          )}
+                          <span className="opacity-80 font-mono">• {telemetry.risk_score}%</span>
+                          {isDanger && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {/* Live HUD info */}
               <div className="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-white/10 text-white text-[11px] font-mono flex items-center gap-3">
