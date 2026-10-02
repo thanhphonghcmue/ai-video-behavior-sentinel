@@ -83,18 +83,10 @@ app = FastAPI(
     description="Surveillance backend powered by OpenCV and Gemini 2.5 Flash"
 )
 
-# Enable CORS for Next.js Frontend (port 3000 & 8000)
-allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "*"
-]
+# Enable CORS for Next.js Frontend (port 3000 & 8000 & wildcard origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
